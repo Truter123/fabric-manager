@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: 8-snippets
+      author: kamil
+      changes:
+        - createTable:
+            tableName: snippet
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: text
+                  type: CLOB
+                  constraints:
+                    nullable: false
+              - column:
+                  name: project_path
+                  type: VARCHAR(4096)
+                  constraints:
+                    nullable: true
+                    foreignKeyName: fk_snippet_project
+                    references: project(path)
+                    deleteCascade: true
+              - column:
+                  name: use_count
+                  type: INT
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_used_at
+                  type: TIMESTAMP

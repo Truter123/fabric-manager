@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 9-settings
+      author: kamil
+      changes:
+        - createTable:
+            tableName: app_setting
+            columns:
+              - column:
+                  name: key
+                  type: VARCHAR(200)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: value
+                  type: VARCHAR(4096)

@@ -1,0 +1,201 @@
+databaseChangeLog:
+  - changeSet:
+      id: 1-project
+      author: kamil
+      changes:
+        - createTable:
+            tableName: project
+            columns:
+              - column:
+                  name: path
+                  type: VARCHAR(4096)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: last_opened
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_tool
+                  type: VARCHAR(4096)
+  - changeSet:
+      id: 2-session
+      author: kamil
+      changes:
+        - createTable:
+            tableName: session
+            columns:
+              - column:
+                  name: id
+                  type: VARCHAR(36)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: project_path
+                  type: VARCHAR(4096)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_session_project
+                    references: project(path)
+                    deleteCascade: true
+              - column:
+                  name: tool_name
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: tool_command
+                  type: VARCHAR(4096)
+              - column:
+                  name: title
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: started_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: ended_at
+                  type: TIMESTAMP
+              - column:
+                  name: last_status
+                  type: VARCHAR(32)
+        - createIndex:
+            tableName: session
+            indexName: idx_session_started_at
+            columns:
+              - column:
+                  name: started_at
+  - changeSet:
+      id: 3-account
+      author: kamil
+      changes:
+        - addColumn:
+            tableName: project
+            columns:
+              - column:
+                  name: account
+                  type: VARCHAR(64)
+        - addColumn:
+            tableName: session
+            columns:
+              - column:
+                  name: account
+                  type: VARCHAR(64)
+  - changeSet:
+      id: 3-note
+      author: kamil
+      changes:
+        - createTable:
+            tableName: note
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: text
+                  type: VARCHAR(4096)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: corrected
+                  type: VARCHAR(4096)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 4-task
+      author: kamil
+      changes:
+        - createTable:
+            tableName: task
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: text
+                  type: VARCHAR(4096)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: due_date
+                  type: DATE
+              - column:
+                  name: done_at
+                  type: TIMESTAMP
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 5-session-pinned
+      author: kamil
+      changes:
+        - addColumn:
+            tableName: session
+            columns:
+              - column:
+                  name: pinned
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+  - changeSet:
+      id: 6-video
+      author: kamil
+      changes:
+        - createTable:
+            tableName: video
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: url
+                  type: VARCHAR(1024)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: title
+                  type: VARCHAR(512)
+              - column:
+                  name: position_ms
+                  type: BIGINT
+                  defaultValueNumeric: 0
+              - column:
+                  name: last_played_at
+                  type: TIMESTAMP
+  - include:
+      file: db/changes/7-notes.yaml
+  - include:
+      file: db/changes/8-snippets.yaml
+  - include:
+      file: db/changes/9-settings.yaml
+  - include:
+      file: db/changes/10-quotes.yaml
+  - include:
+      file: db/changes/11-quote-fixes.yaml
+  - include:
+      file: db/changes/12-quote-seed-removal.yaml

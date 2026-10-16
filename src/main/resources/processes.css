@@ -1,0 +1,20 @@
+.state-running {
+    -fx-text-fill: -fm-green;
+}
+
+.state-exited {
+    -fx-text-fill: -fm-muted;
+}
+
+.proc-stats-item {
+    -fx-text-fill: -fm-muted;
+    -fx-font-size: 12px;
+}
+
+.proc-stats-warn {
+    -fx-text-fill: #e0a050;
+}
+
+.proc-stats-hot {
+    -fx-text-fill: -fm-red;
+}

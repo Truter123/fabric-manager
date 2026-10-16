@@ -1,0 +1,65 @@
+.snippet-picker {
+    -fm-bg: #1e1f22;
+    -fm-raised: #2b2d30;
+    -fm-border: #43454a;
+    -fm-accent: #4f9cf9;
+    -fm-text: #dfe1e5;
+    -fm-muted: #8c8f94;
+    -fx-background-color: -fm-raised;
+    -fx-border-color: -fm-border;
+    -fx-border-width: 1;
+    -fx-padding: 10;
+}
+
+.snippet-picker .label {
+    -fx-text-fill: -fm-text;
+}
+
+.snippet-picker .text-field,
+.snippet-picker .text-area,
+.snippet-picker .text-area .content {
+    -fx-background-color: -fm-bg;
+    -fx-text-fill: -fm-text;
+    -fx-control-inner-background: -fm-bg;
+    -fx-highlight-fill: -fm-accent;
+}
+
+.snippet-picker .list-view {
+    -fx-background-color: -fm-bg;
+    -fx-control-inner-background: -fm-bg;
+}
+
+.snippet-picker .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -fm-text;
+}
+
+.snippet-picker .list-cell:selected {
+    -fx-background-color: -fm-accent;
+}
+
+.snippet-name {
+    -fx-font-weight: bold;
+    -fx-text-fill: -fm-text;
+}
+
+.snippet-preview {
+    -fx-text-fill: -fm-muted;
+}
+
+.snippet-badge {
+    -fx-text-fill: -fm-text;
+    -fx-background-color: -fm-border;
+    -fx-background-radius: 8;
+    -fx-padding: 0 6 0 6;
+    -fx-font-size: 0.8em;
+}
+
+.snippet-hint {
+    -fx-text-fill: -fm-muted;
+    -fx-font-size: 0.85em;
+}
+
+.snippet-picker .check-box {
+    -fx-text-fill: -fm-text;
+}

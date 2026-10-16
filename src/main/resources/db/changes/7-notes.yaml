@@ -1,0 +1,57 @@
+databaseChangeLog:
+  - changeSet:
+      id: 7-notes-columns
+      author: kamil
+      changes:
+        - addColumn:
+            tableName: note
+            columns:
+              - column:
+                  name: title
+                  type: VARCHAR(256)
+              - column:
+                  name: tags
+                  type: VARCHAR(512)
+              - column:
+                  name: pinned
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: inbox
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: project_path
+                  type: VARCHAR(4096)
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+        - sql:
+            sql: UPDATE note SET updated_at = created_at
+        - addNotNullConstraint:
+            tableName: note
+            columnName: updated_at
+            columnDataType: TIMESTAMP
+  - changeSet:
+      id: 7-notes-body-clob
+      author: kamil
+      changes:
+        - modifyDataType:
+            tableName: note
+            columnName: text
+            newDataType: CLOB
+  - changeSet:
+      id: 7-notes-project-fk
+      author: kamil
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: note
+            baseColumnNames: project_path
+            constraintName: fk_note_project
+            referencedTableName: project
+            referencedColumnNames: path
+            onDelete: SET NULL

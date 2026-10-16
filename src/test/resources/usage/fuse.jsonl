@@ -1,0 +1,7 @@
+{"type":"user","isSidechain":false,"message":{"role":"user","content":"Hello there"}}
+{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[{"type":"thinking","thinking":"SECRET-THOUGHT"},{"type":"text","text":"Hi, how can I help?"}]}}
+{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"/x"}}]}}
+{"type":"user","isSidechain":false,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"TOOL-OUTPUT"}]}}
+{"type":"user","isSidechain":false,"isMeta":true,"message":{"role":"user","content":"META-NOISE"}}
+{this is not json
+{"type":"attachment","isSidechain":false}

@@ -2,3 +2,5 @@ build/
 .gradle/
 target/
 .idea/
+*.iml
+.mcp.json

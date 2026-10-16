@@ -1,1 +1,1 @@
-rootProject.name = "claude-terminal-fx"
+rootProject.name = "fabric-manager"

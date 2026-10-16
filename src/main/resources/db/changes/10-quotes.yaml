@@ -1,0 +1,280 @@
+databaseChangeLog:
+  - changeSet:
+      id: 10-quotes
+      author: kamil
+      changes:
+        - createTable:
+            tableName: quote
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: text
+                  type: VARCHAR(2048)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: author
+                  type: VARCHAR(256)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: false
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Since it is possible that you may depart from life this very moment, regulate every act and thought accordingly."
+              - column:
+                  name: author
+                  value: "Marcus Aurelius"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "You have power over your mind - not outside events. Realize this, and you will find strength."
+              - column:
+                  name: author
+                  value: "Marcus Aurelius"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "The happiness of your life depends upon the quality of your thoughts."
+              - column:
+                  name: author
+                  value: "Marcus Aurelius"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "If it is not right, do not do it; if it is not true, do not say it."
+              - column:
+                  name: author
+                  value: "Marcus Aurelius"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "The impediment to action advances action. What stands in the way becomes the way."
+              - column:
+                  name: author
+                  value: "Marcus Aurelius"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Waste no more time arguing about what a good man should be. Be one."
+              - column:
+                  name: author
+                  value: "Marcus Aurelius"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "We suffer more often in imagination than in reality."
+              - column:
+                  name: author
+                  value: "Seneca"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "It is not that we have a short time to live, but that we waste a lot of it."
+              - column:
+                  name: author
+                  value: "Seneca"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Luck is what happens when preparation meets opportunity."
+              - column:
+                  name: author
+                  value: "Seneca"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Difficulties strengthen the mind, as labor does the body."
+              - column:
+                  name: author
+                  value: "Seneca"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "While we are postponing, life speeds by."
+              - column:
+                  name: author
+                  value: "Seneca"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "He who is brave is free."
+              - column:
+                  name: author
+                  value: "Seneca"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "It's not what happens to you, but how you react to it that matters."
+              - column:
+                  name: author
+                  value: "Epictetus"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "No man is free who is not master of himself."
+              - column:
+                  name: author
+                  value: "Epictetus"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "First say to yourself what you would be; and then do what you have to do."
+              - column:
+                  name: author
+                  value: "Epictetus"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Wealth consists not in having great possessions, but in having few wants."
+              - column:
+                  name: author
+                  value: "Epictetus"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Make the best use of what is in your power, and take the rest as it happens."
+              - column:
+                  name: author
+                  value: "Epictetus"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "The journey of a thousand miles begins with a single step."
+              - column:
+                  name: author
+                  value: "Lao Tzu"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "We are what we repeatedly do. Excellence, then, is not an act, but a habit."
+              - column:
+                  name: author
+                  value: "Will Durant"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "He who has a why to live can bear almost any how."
+              - column:
+                  name: author
+                  value: "Friedrich Nietzsche"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
+        - insert:
+            tableName: quote
+            columns:
+              - column:
+                  name: text
+                  value: "Well begun is half done."
+              - column:
+                  name: author
+                  value: "Aristotle"
+              - column:
+                  name: created_at
+                  valueComputed: CURRENT_TIMESTAMP
