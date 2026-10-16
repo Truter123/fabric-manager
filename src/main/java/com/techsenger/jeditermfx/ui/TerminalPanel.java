@@ -1761,7 +1761,13 @@ public class TerminalPanel implements TerminalDisplay, TerminalActionProvider {
 
     public void beep() {
         if (mySettingsProvider.audibleBell()) {
-            Toolkit.getDefaultToolkit().beep();
+            // A sound event, not AWT's X bell: GNOME turns the X bell into a system notification.
+            try {
+                new ProcessBuilder("canberra-gtk-play", "-i", "bell").redirectErrorStream(true)
+                        .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            } catch (java.io.IOException ignored) {
+                // no sound tool: stay silent
+            }
         }
     }
 

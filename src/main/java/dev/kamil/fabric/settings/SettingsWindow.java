@@ -247,10 +247,10 @@ public final class SettingsWindow {
         rows.add(bool(TERMINAL, TerminalSettings.COPY_ON_SELECT, false, "Copy on select",
                 "Copy the selected text to the clipboard as soon as you select it. Applies to new tabs."));
         rows.add(bool(TERMINAL, TerminalSettings.AUDIBLE_BELL, false, "Audible bell",
-                "Beep on the terminal bell; GNOME may also show a notification. Applies to new tabs."));
+                "Play a sound on the terminal bell. Applies to new tabs."));
 
-        rows.add(bool(NOTIFICATIONS, Notifier.DESKTOP, true, "Desktop notification",
-                "Show a notification when a session needs you while you look elsewhere."));
+        rows.add(bool(NOTIFICATIONS, Notifier.DESKTOP, true, "In-app notification",
+                "Show a toast inside the window when a session needs you while you look elsewhere."));
         rows.add(bool(NOTIFICATIONS, Notifier.SOUND, true, "Sound",
                 "Play a sound together with the notification."));
         rows.add(bool(NOTIFICATIONS, Notifier.NEEDS_INPUT, true, "Notify when Claude needs input",

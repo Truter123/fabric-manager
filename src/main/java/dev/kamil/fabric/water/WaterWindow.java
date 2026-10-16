@@ -12,7 +12,6 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Spinner;
@@ -25,8 +24,9 @@ import javafx.stage.Window;
 import javafx.util.Duration;
 
 /**
- * Non-modal window over the external water-reminder: today's progress, Drank / Skip, settings and the
- * reminder switch. It never notifies; the script's cron job does. Refreshes when shown and every minute.
+ * Non-modal window over the water reminder: today's progress, Drank / Skip, settings and the reminder switch
+ * (ENABLED in the config, obeyed at once by WaterReminder). It never notifies itself. Refreshes when shown and
+ * every minute.
  */
 public final class WaterWindow {
 
@@ -42,15 +42,13 @@ public final class WaterWindow {
     private final Spinner<Integer> ml = new Spinner<>(1, 5000, 250, 50);
     private final Spinner<Integer> every = new Spinner<>(1, 1440, 60, 5);
     private final Spinner<Integer> goal = new Spinner<>(1, 20000, 2000, 250);
-    private final CheckBox notify = new CheckBox("Desktop notification");
-    private final CheckBox popup = new CheckBox("Check-in window (Drank / Skip)");
-    private final Label noReminderHint = new Label("No reminder will be shown");
     private final ToggleButton reminder = new ToggleButton();
     private final Label status = new Label();
     private final VBox entries = new VBox(2);
     private final Timeline ticker = new Timeline(new KeyFrame(Duration.seconds(60), e -> refresh()));
     private int currentMl = 250;
     private boolean updatingToggle;
+    private WaterStore.Config lastConfig = WaterStore.Config.DEFAULT;
 
     /** Opens the window, or brings the existing one to front. */
     public static void open(Window owner) {
@@ -91,11 +89,6 @@ public final class WaterWindow {
         today.getStyleClass().add("history-meta");
         counts.getStyleClass().add("history-meta");
         status.getStyleClass().add("history-meta");
-        noReminderHint.getStyleClass().add("history-meta");
-        noReminderHint.setVisible(false);
-        noReminderHint.setManaged(false);
-        notify.setOnAction(e -> updateHint());
-        popup.setOnAction(e -> updateHint());
 
         drank.setOnAction(e -> log(currentMl, WaterStore.DRANK));
         skip.setOnAction(e -> log(currentMl, WaterStore.SKIPPED));
@@ -111,11 +104,9 @@ public final class WaterWindow {
         var settings = new HBox(8, new Label("ml per glass"), ml, new Label("every min"), every,
                 new Label("goal ml"), goal, save);
         settings.setAlignment(Pos.CENTER_LEFT);
-        var channels = new HBox(12, notify, popup, noReminderHint);
-        channels.setAlignment(Pos.CENTER_LEFT);
         var spacer = new VBox();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        var root = new VBox(10, today, progress, counts, buttons, settings, channels, reminder, new Label("Today's log"),
+        var root = new VBox(10, today, progress, counts, buttons, settings, reminder, new Label("Today's log"),
                 entries, spacer, status);
         root.setPadding(new Insets(14));
         var scene = new Scene(root, 640, 560);
@@ -128,22 +119,21 @@ public final class WaterWindow {
         });
     }
 
-    /** Reads the files and asks cron for the reminder state off the FX thread, then updates the view. */
+    /** Reads the files and reads the files off the FX thread, then updates the view. */
     private void refresh() {
         Thread.startVirtualThread(() -> {
             try {
                 var config = store.readConfig();
                 var day = LocalDate.now();
                 var log = store.today(day);
-                boolean on = reminderOn();
-                Platform.runLater(() -> show(config, day, log, on));
+                Platform.runLater(() -> show(config, day, log));
             } catch (IOException e) {
                 Platform.runLater(() -> status.setText("Cannot read water files: " + e.getMessage()));
             }
         });
     }
 
-    private void show(WaterStore.Config config, LocalDate day, List<WaterStore.Entry> log, boolean on) {
+    private void show(WaterStore.Config config, LocalDate day, List<WaterStore.Entry> log) {
         currentMl = config.ml();
         int total = WaterStore.total(log, day);
         today.setText("Today: " + total + " / " + config.goalMl() + " ml");
@@ -161,12 +151,10 @@ public final class WaterWindow {
         if (!goal.isFocused()) {
             goal.getValueFactory().setValue(config.goalMl());
         }
-        notify.setSelected(config.notification());
-        popup.setSelected(config.popup());
-        updateHint();
+        lastConfig = config;
         updatingToggle = true;
-        reminder.setSelected(on);
-        reminder.setText(on ? "Reminder: on" : "Reminder: off");
+        reminder.setSelected(config.enabled());
+        reminder.setText(config.enabled() ? "Reminder: on" : "Reminder: off");
         updatingToggle = false;
         var rows = new ArrayList<Label>();
         for (int i = log.size() - 1; i >= 0; i--) {
@@ -175,12 +163,6 @@ public final class WaterWindow {
         }
         entries.getChildren().setAll(rows);
         status.setText("");
-    }
-
-    private void updateHint() {
-        boolean none = !notify.isSelected() && !popup.isSelected();
-        noReminderHint.setVisible(none);
-        noReminderHint.setManaged(none);
     }
 
     private void log(int amount, String kind) {
@@ -197,7 +179,7 @@ public final class WaterWindow {
 
     private void saveConfig() {
         var config = new WaterStore.Config(ml.getValue(), every.getValue(), goal.getValue(),
-                notify.isSelected(), popup.isSelected());
+                lastConfig.notification(), lastConfig.popup(), lastConfig.enabled());
         Thread.startVirtualThread(() -> {
             try {
                 store.writeConfig(config);
@@ -212,36 +194,13 @@ public final class WaterWindow {
     private void toggleReminder(boolean on) {
         Thread.startVirtualThread(() -> {
             try {
-                runScript(on ? "on" : "off");
+                var c = store.readConfig();
+                store.writeConfig(new WaterStore.Config(c.ml(), c.everyMin(), c.goalMl(), c.notification(),
+                        c.popup(), on));
             } catch (IOException e) {
-                Platform.runLater(() -> status.setText("Cannot run water-reminder: " + e.getMessage()));
+                Platform.runLater(() -> status.setText("Cannot save the settings: " + e.getMessage()));
             }
             refresh();
         });
-    }
-
-    private static boolean reminderOn() {
-        try {
-            var process = new ProcessBuilder("crontab", "-l").redirectErrorStream(true).start();
-            var text = new String(process.getInputStream().readAllBytes());
-            process.waitFor();
-            return text.contains("# water-reminder");
-        } catch (IOException e) {
-            return false;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
-        }
-    }
-
-    private static void runScript(String command) throws IOException {
-        try {
-            var process = new ProcessBuilder(WaterStore.script().toString(), command)
-                    .redirectErrorStream(true).start();
-            process.getInputStream().readAllBytes();
-            process.waitFor();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }

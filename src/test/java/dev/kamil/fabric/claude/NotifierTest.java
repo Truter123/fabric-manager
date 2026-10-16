@@ -12,26 +12,27 @@ import org.junit.jupiter.api.Test;
 class NotifierTest {
 
     private final List<List<String>> commands = new ArrayList<>();
-    private final Notifier notifier = new Notifier(commands::add, Runnable::run);
+    private final List<List<String>> toasts = new ArrayList<>();
+    private final Notifier notifier = new Notifier(commands::add, Runnable::run, (t, m) -> toasts.add(List.of(t, m)));
 
     @Test
     void notifiesWhenWindowNotFocused() {
         assertTrue(notifier.onState("s", "app", Activity.DONE, false, true));
-        assertEquals(List.of("notify-send", "-a", "Fabric Manager", "app", "Claude finished"), commands.get(0));
-        assertEquals(List.of("canberra-gtk-play", "-i", "complete"), commands.get(1));
+        assertEquals(List.of(List.of("app", "Claude finished")), toasts);
+        assertEquals(List.of(List.of("canberra-gtk-play", "-i", "complete")), commands);
     }
 
     @Test
     void notifiesWhenTabNotSelected() {
         assertTrue(notifier.onState("s", "app", Activity.WAITING, true, false));
-        assertEquals("Claude is waiting for you", commands.get(0).get(4));
-        assertEquals(List.of("canberra-gtk-play", "-i", "message"), commands.get(1));
+        assertEquals("Claude is waiting for you", toasts.get(0).get(1));
+        assertEquals(List.of("canberra-gtk-play", "-i", "message"), commands.get(0));
     }
 
     @Test
     void errorUsesErrorText() {
         assertTrue(notifier.onState("s", "app", Activity.ERROR, false, false));
-        assertEquals("error", commands.get(0).get(4));
+        assertEquals("error", toasts.get(0).get(1));
     }
 
     @Test
@@ -39,6 +40,7 @@ class NotifierTest {
         assertFalse(notifier.onState("s", "app", Activity.DONE, true, true));
         assertFalse(notifier.onState("s", "app", Activity.WORKING, false, false));
         assertTrue(commands.isEmpty());
+        assertTrue(toasts.isEmpty());
     }
 
     @Test
@@ -52,25 +54,26 @@ class NotifierTest {
     }
 
     private Notifier with(dev.kamil.fabric.settings.AppSettings settings) {
-        return new Notifier(commands::add, Runnable::run, settings);
+        return new Notifier(commands::add, Runnable::run, (t, m) -> toasts.add(List.of(t, m)), settings);
     }
 
     @Test
-    void soundOffSendsOnlyTheDesktopNotification() {
+    void soundOffShowsOnlyTheToast() {
         var settings = dev.kamil.fabric.settings.AppSettings.inMemory();
         settings.setBoolean("notify.sound", false);
         assertTrue(with(settings).onState("s", "app", Activity.DONE, false, false));
-        assertEquals(1, commands.size());
-        assertEquals("notify-send", commands.get(0).get(0));
+        assertEquals(1, toasts.size());
+        assertTrue(commands.isEmpty());
     }
 
     @Test
-    void desktopOffSendsOnlyTheSound() {
+    void toastOffPlaysOnlyTheSound() {
         var settings = dev.kamil.fabric.settings.AppSettings.inMemory();
         settings.setBoolean("notify.desktop", false);
         assertTrue(with(settings).onState("s", "app", Activity.DONE, false, false));
         assertEquals(1, commands.size());
         assertEquals("canberra-gtk-play", commands.get(0).get(0));
+        assertTrue(toasts.isEmpty());
     }
 
     @Test
@@ -80,6 +83,7 @@ class NotifierTest {
         settings.setBoolean("notify.sound", false);
         assertFalse(with(settings).onState("s", "app", Activity.DONE, false, false));
         assertTrue(commands.isEmpty());
+        assertTrue(toasts.isEmpty());
     }
 
     @Test

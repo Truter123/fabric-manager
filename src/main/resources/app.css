@@ -364,3 +364,15 @@
     -fx-text-fill: #e6e6e6;
     -fx-font-size: 15px;
 }
+
+.toasts { -fx-padding: 12; }
+.toast {
+    -fx-background-color: -fm-raised;
+    -fx-border-color: -fm-border; -fx-border-radius: 8; -fx-background-radius: 8;
+    -fx-padding: 10 12 10 12; -fx-pref-width: 300; -fx-max-width: 300;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 12, 0.2, 0, 3);
+}
+.toast-title { -fx-text-fill: -fm-text; -fx-font-size: 13px; -fx-font-weight: bold; }
+.toast-text { -fx-text-fill: -fm-muted; -fx-font-size: 12px; }
+.toast-close { -fx-background-color: transparent; -fx-text-fill: -fm-muted; -fx-padding: 0 4 0 4; -fx-cursor: hand; }
+.toast-close:hover { -fx-text-fill: -fm-text; }

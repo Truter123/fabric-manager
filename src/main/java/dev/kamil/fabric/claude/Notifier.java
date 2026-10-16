@@ -8,14 +8,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * Desktop notification and sound when a session needs the user while they look elsewhere. The decision and the
- * debounce live here; the commands run through an injected runner, off the calling thread.
+ * In-app toast and sound when a session needs the user while they look elsewhere. The decision and the
+ * debounce live here; the toast goes to an injected sink (thread-safe) and the sound command runs through an injected runner, off the
+ * calling thread. Nothing is ever sent to the desktop.
  */
 public final class Notifier {
 
+    /** Setting key for the in-app toast (the stored key predates the in-app toasts). */
     public static final String DESKTOP = "notify.desktop";
     public static final String SOUND = "notify.sound";
     public static final String NEEDS_INPUT = "notify.needsInput";
@@ -24,20 +27,23 @@ public final class Notifier {
     private final AppSettings settings;
     private final Consumer<List<String>> runner;
     private final Executor executor;
+    private final BiConsumer<String, String> toast;
     private final Map<String, Activity> notified = new HashMap<>();
 
-    public Notifier(Consumer<List<String>> runner, Executor executor) {
-        this(runner, executor, AppSettings.shared());
+    public Notifier(Consumer<List<String>> runner, Executor executor, BiConsumer<String, String> toast) {
+        this(runner, executor, toast, AppSettings.shared());
     }
 
-    public Notifier(Consumer<List<String>> runner, Executor executor, AppSettings settings) {
+    public Notifier(Consumer<List<String>> runner, Executor executor, BiConsumer<String, String> toast,
+            AppSettings settings) {
         this.settings = settings;
+        this.toast = toast;
         this.runner = runner;
         this.executor = executor;
     }
 
-    /** Runs the commands with ProcessBuilder on a daemon thread; a missing binary is logged once. */
-    public static Notifier system() {
+    /** Shows toasts through the sink; runs the sound command on a daemon thread, a missing binary logged once. */
+    public static Notifier system(BiConsumer<String, String> toast) {
         var executor = Executors.newSingleThreadExecutor(r -> {
             var thread = new Thread(r, "notifier");
             thread.setDaemon(true);
@@ -50,10 +56,10 @@ public final class Notifier {
                         .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
             } catch (IOException e) {
                 if (logged.compareAndSet(false, true)) {
-                    System.err.println("Desktop notifications need " + command.get(0) + ": " + e.getMessage());
+                    System.err.println("The notification sound needs " + command.get(0) + ": " + e.getMessage());
                 }
             }
-        }, executor);
+        }, executor, toast);
     }
 
     /** True for a state that needs the user while the session is not in front of them. */
@@ -80,16 +86,16 @@ public final class Notifier {
             return false;
         }
         var kind = activity == Activity.DONE ? FINISHED : NEEDS_INPUT;
-        var desktop = settings.getBoolean(DESKTOP, true);
+        var showToast = settings.getBoolean(DESKTOP, true);
         var sound = settings.getBoolean(SOUND, true);
-        if (!settings.getBoolean(kind, true) || !(desktop || sound)) {
+        if (!settings.getBoolean(kind, true) || !(showToast || sound)) {
             return false;
         }
         notified.put(sessionId, activity);
         var soundName = activity == Activity.WAITING ? "message" : "complete";
         executor.execute(() -> {
-            if (desktop) {
-                runner.accept(List.of("notify-send", "-a", "Fabric Manager", name, message(activity)));
+            if (showToast) {
+                toast.accept(name, message(activity));
             }
             if (sound) {
                 runner.accept(List.of("canberra-gtk-play", "-i", soundName));

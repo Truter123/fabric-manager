@@ -12,13 +12,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Reads and writes the files of the external water-reminder script (config and log.csv in its directory).
- * The script's cron job sends the notifications; this class never does.
+ * Reads and writes the water-reminder files (config and log.csv in ~/.config/water-reminder). The in-app
+ * WaterReminder shows the reminders; this class never does. NOTIFY and POPUP are kept for compatibility only.
  */
 public final class WaterStore {
 
-    public record Config(int ml, int everyMin, int goalMl, boolean notification, boolean popup) {
-        public static final Config DEFAULT = new Config(250, 60, 2000, true, true);
+    public record Config(int ml, int everyMin, int goalMl, boolean notification, boolean popup,
+            boolean enabled) {
+        public static final Config DEFAULT = new Config(250, 60, 2000, true, true, true);
     }
 
     public record Entry(LocalDate date, String time, int ml, String status) {
@@ -41,10 +42,6 @@ public final class WaterStore {
         return Path.of(System.getProperty("user.home"), ".config", "water-reminder");
     }
 
-    public static Path script() {
-        return Path.of(System.getProperty("user.home"), ".local", "bin", "water-reminder");
-    }
-
     private Path configFile() {
         return dir.resolve("config");
     }
@@ -53,7 +50,7 @@ public final class WaterStore {
         return dir.resolve("log.csv");
     }
 
-    /** Creates the directory, config (defaults) and log when missing, as the script does. */
+    /** Creates the directory, config (defaults) and log when missing, when missing. */
     public void ensure() throws IOException {
         Files.createDirectories(dir);
         if (!Files.exists(configFile())) {
@@ -71,6 +68,7 @@ public final class WaterStore {
         int goal = Config.DEFAULT.goalMl();
         boolean notification = true;
         boolean popup = true;
+        boolean enabled = true;
         for (var line : Files.readAllLines(configFile(), StandardCharsets.UTF_8)) {
             int eq = line.indexOf('=');
             if (eq < 0) {
@@ -85,20 +83,22 @@ public final class WaterStore {
                     case "GOAL_ML" -> goal = Integer.parseInt(value);
                     case "NOTIFY" -> notification = !value.equals("0");
                     case "POPUP" -> popup = !value.equals("0");
+                    case "ENABLED" -> enabled = !value.equals("0");
                     default -> { }
                 }
             } catch (NumberFormatException e) {
                 // keep the default for an unreadable value
             }
         }
-        return new Config(ml, every, goal, notification, popup);
+        return new Config(ml, every, goal, notification, popup, enabled);
     }
 
     public void writeConfig(Config config) throws IOException {
         Files.createDirectories(dir);
         Files.writeString(configFile(),
                 "ML=" + config.ml() + "\nEVERY_MIN=" + config.everyMin() + "\nGOAL_ML=" + config.goalMl()
-                        + "\nNOTIFY=" + (config.notification() ? 1 : 0) + "\nPOPUP=" + (config.popup() ? 1 : 0) + "\n",
+                        + "\nNOTIFY=" + (config.notification() ? 1 : 0) + "\nPOPUP=" + (config.popup() ? 1 : 0)
+                        + "\nENABLED=" + (config.enabled() ? 1 : 0) + "\n",
                 StandardCharsets.UTF_8);
     }
 
@@ -134,7 +134,7 @@ public final class WaterStore {
         return entries.stream().filter(e -> e.date().equals(day) && status.equals(e.status())).count();
     }
 
-    /** The log line the script writes: date,HH:mm,ml,status. */
+    /** The log line format: date,HH:mm,ml,status. */
     public static String format(LocalDate date, LocalTime time, int ml, String status) {
         return date + "," + TIME.format(time) + "," + ml + "," + status;
     }

@@ -19,13 +19,26 @@ class WaterStoreTest {
     @Test
     void parsesConfig() throws IOException {
         Files.writeString(tmp.resolve("config"), "ML=300\nEVERY_MIN=45\nGOAL_ML=2500\nNOTIFY=0\nPOPUP=1\n");
-        assertEquals(new WaterStore.Config(300, 45, 2500, false, true), new WaterStore(tmp).readConfig());
+        assertEquals(new WaterStore.Config(300, 45, 2500, false, true, true), new WaterStore(tmp).readConfig());
+    }
+
+    @Test
+    void parsesEnabledOff() throws IOException {
+        Files.writeString(tmp.resolve("config"),
+                "ML=300\nEVERY_MIN=45\nGOAL_ML=2500\nNOTIFY=1\nPOPUP=1\nENABLED=0\n");
+        assertEquals(new WaterStore.Config(300, 45, 2500, true, true, false), new WaterStore(tmp).readConfig());
+    }
+
+    @Test
+    void oldFiveLineConfigIsEnabled() throws IOException {
+        Files.writeString(tmp.resolve("config"), "ML=300\nEVERY_MIN=45\nGOAL_ML=2500\nNOTIFY=0\nPOPUP=0\n");
+        assertEquals(new WaterStore.Config(300, 45, 2500, false, false, true), new WaterStore(tmp).readConfig());
     }
 
     @Test
     void oldThreeLineConfigDefaultsNotifyAndPopupOn() throws IOException {
         Files.writeString(tmp.resolve("config"), "ML=300\nEVERY_MIN=45\nGOAL_ML=2500\n");
-        assertEquals(new WaterStore.Config(300, 45, 2500, true, true), new WaterStore(tmp).readConfig());
+        assertEquals(new WaterStore.Config(300, 45, 2500, true, true, true), new WaterStore(tmp).readConfig());
     }
 
     @Test
@@ -33,14 +46,14 @@ class WaterStoreTest {
         var dir = tmp.resolve("new");
         var store = new WaterStore(dir);
         assertEquals(WaterStore.Config.DEFAULT, store.readConfig());
-        assertEquals("ML=250\nEVERY_MIN=60\nGOAL_ML=2000\nNOTIFY=1\nPOPUP=1\n", Files.readString(dir.resolve("config")));
+        assertEquals("ML=250\nEVERY_MIN=60\nGOAL_ML=2000\nNOTIFY=1\nPOPUP=1\nENABLED=1\n", Files.readString(dir.resolve("config")));
         assertTrue(Files.exists(dir.resolve("log.csv")));
     }
 
     @Test
     void writesConfigInTheScriptFormat() throws IOException {
-        new WaterStore(tmp).writeConfig(new WaterStore.Config(200, 30, 1800, true, false));
-        assertEquals("ML=200\nEVERY_MIN=30\nGOAL_ML=1800\nNOTIFY=1\nPOPUP=0\n", Files.readString(tmp.resolve("config")));
+        new WaterStore(tmp).writeConfig(new WaterStore.Config(200, 30, 1800, true, false, false));
+        assertEquals("ML=200\nEVERY_MIN=30\nGOAL_ML=1800\nNOTIFY=1\nPOPUP=0\nENABLED=0\n", Files.readString(tmp.resolve("config")));
     }
 
     @Test

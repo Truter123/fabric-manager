@@ -135,8 +135,8 @@ public final class TerminalSettings extends DefaultSettingsProvider {
     }
 
     /**
-     * Off: the bell (Claude sends BEL when it finishes) calls AWT's beep, an X bell on a hidden untitled window,
-     * and GNOME turns that into a '"" is ready' notification. The sidebar dot already shows the state.
+     * On: the bell (Claude sends BEL when it finishes) plays a sound through canberra-gtk-play. Off by default:
+     * the sidebar dot already shows the state.
      */
     @Override
     public boolean audibleBell() {

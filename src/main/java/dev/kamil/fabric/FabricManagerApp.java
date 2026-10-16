@@ -94,7 +94,10 @@ public final class FabricManagerApp extends Application {
         }
     };
     private final BorderPane root = new BorderPane(tabs);
-    private final Notifier notifier = Notifier.system();
+    private final dev.kamil.fabric.toast.Toasts toasts = new dev.kamil.fabric.toast.Toasts();
+    private final Notifier notifier = Notifier.system(
+            (title, text) -> Platform.runLater(() -> toasts.show(title, text)));
+    private dev.kamil.fabric.water.WaterReminder waterReminder;
     private SessionSidebar sidebar;
     private AgentsPanel agentsPanel;
     private OverviewGrid overview;
@@ -145,8 +148,9 @@ public final class FabricManagerApp extends Application {
             }
         });
         quoteBar = new QuoteBar(db);
-        root.setCenter(new BorderPane(new javafx.scene.layout.StackPane(tabs, empty, overview), quoteBar, null,
-                statusBar, null));
+        javafx.scene.layout.StackPane.setAlignment(toasts, javafx.geometry.Pos.TOP_RIGHT);
+        root.setCenter(new BorderPane(new javafx.scene.layout.StackPane(tabs, empty, overview, toasts), quoteBar,
+                null, statusBar, null));
         sidebar = new SessionSidebar(tabs);
         sidebar.setOnHistory(tab -> openHistory(tab.directory()));
         sidebar.setOnFuse(this::fuse);
@@ -222,6 +226,9 @@ public final class FabricManagerApp extends Application {
             }
         });
         stage.show();
+        waterReminder = new dev.kamil.fabric.water.WaterReminder(toasts,
+                new dev.kamil.fabric.water.WaterStore(dev.kamil.fabric.water.WaterStore.standardDir()));
+        waterReminder.start();
         stage.focusedProperty().addListener((o, was, focused) -> {
             if (focused && tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
                 tab.setUnseen(false);
@@ -253,6 +260,9 @@ public final class FabricManagerApp extends Application {
     public void stop() {
         if (sidebar != null) {
             sidebar.stop();
+        }
+        if (waterReminder != null) {
+            waterReminder.stop();
         }
         usageTimer.shutdownNow();
         if (watcher != null) {
