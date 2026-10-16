@@ -77,6 +77,8 @@ public final class SessionSidebar extends BorderPane {
     private Node usageView;
     private Node actionsGrid;
     private Map<TerminalTab, Sample> lastSample = Map.of();
+    /** The row menu on screen; rebuilds wait until it closes, since replacing its anchor row hides it. */
+    private ContextMenu openMenu;
     private Consumer<TerminalTab> onHistory;
     private BiConsumer<TerminalTab, TerminalTab> onFuse;
     private Consumer<TerminalTab> onDuplicate;
@@ -449,6 +451,9 @@ public final class SessionSidebar extends BorderPane {
     /** Rebuilds the Pinned and Projects sections from the tabs immediately (FX thread). */
     void rebuildNow() {
         rebuildDelay.stop();
+        if (openMenu != null && openMenu.isShowing()) {
+            return;
+        }
         var all = snapshot(tabs);
         var groups = SidebarGroups.group(all, TerminalTab::directory, TerminalTab::pinned);
         content.getChildren().clear();
@@ -592,7 +597,12 @@ public final class SessionSidebar extends BorderPane {
             }
         });
         var menu = contextMenu(tab, row);
+        menu.setOnHidden(e -> {
+            openMenu = null;
+            rebuild();
+        });
         row.setOnContextMenuRequested(e -> {
+            openMenu = menu;
             menu.show(row, e.getScreenX(), e.getScreenY());
             e.consume();
         });
