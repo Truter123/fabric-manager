@@ -27,8 +27,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
     implementation("com.h2database:h2:2.5.252")
     implementation("org.liquibase:liquibase-core:5.0.4")
-    runtimeOnly("org.slf4j:slf4j-simple:2.0.16")
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    runtimeOnly("org.slf4j:slf4j-simple:2.0.20")
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

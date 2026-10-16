@@ -1,6 +1,6 @@
 # FabricManager
 
-Tabbed JavaFX terminal for Claude Code, Codex, Gemini, Aider or any CLI. Java 21, JavaFX 21,
+Tabbed JavaFX terminal for Claude Code, Codex, Gemini, Aider or any CLI. Java 25, JavaFX 25.0.4,
 [JediTermFX](https://github.com/techsenger/jeditermfx) 1.1.0 (JavaFX Canvas port of JetBrains JediTerm),
 [pty4j](https://github.com/JetBrains/pty4j) 0.14.0.
 
@@ -23,6 +23,8 @@ Tabbed JavaFX terminal for Claude Code, Codex, Gemini, Aider or any CLI. Java 21
 | Ctrl+Shift+K | tasks: notes with an optional due date (Overdue / Today / Later / No date) |
 | Ctrl+Shift+P | processes: all Docker containers and your Java / Node (Angular) processes; start, stop, logs; a stats bar on top shows CPU / GPU / NVMe temperature, CPU load, RAM and battery (read from /sys and /proc, only while the window is open) |
 | Ctrl+Shift+V | body double: show / hide the small always-on-top video window |
+| Ctrl+Shift+G | SSH: pick a host and open it in a new tab; add, edit, delete or hide hosts |
+| Ctrl+Shift+I | Water: today's water, Drank / Skip, reminder settings |
 | (sidebar) | the session sidebar is always shown (its footer shows token usage and cost: today and the current 5-hour block; each Claude session row shows its context fill; the quota is fetched once at start and then refreshed only while the usage panel is expanded, the collapsed line shows the last numbers with their age) |
 | Ctrl+Shift+A | agents panel: show / hide the right panel listing open Claude tabs (state, project, account, context, unread), waiting first; click a row to jump to the tab. A status line under the terminal shows state, context %, git branch and account of the active tab |
 | Ctrl+Shift+O | overview: one card per session with its last output; Enter/click jumps, 1–9 picks, Esc closes |
@@ -51,10 +53,39 @@ Click the `⎇ branch` label to switch branches; right-click a row for Switch br
 
 ## Notifications, pin, unread
 
-- When a session turns waiting, done or error while the window is unfocused or its tab is not selected, a desktop
-  notification (`notify-send`) and a sound (`canberra-gtk-play`) fire once per state change. Missing binaries are ignored.
+- When a session turns waiting, done or error while the window is unfocused or its tab is not selected, an in-app
+  toast and a sound (`canberra-gtk-play`) fire once per state change. A missing sound binary is ignored.
 - Such a session is unread: bold name and a small accent dot in the sidebar, cleared when you select its tab in the focused window.
 - Right-click a row, Pin or Unpin: pinned sessions sort first with a pin marker; the pin is stored with the session.
+
+## Toasts
+
+All notifications stay inside the app: no desktop notifications. Toasts appear in the top-right corner of the
+main window, newest on top, at most 4. A toast without buttons closes after 8 s; one with buttons stays until
+you click one or ×. Toasts never take focus. The terminal bell (Settings → Terminal → Audible bell, off by
+default) plays a sound with `canberra-gtk-play`.
+
+## Water
+
+- Ctrl+Shift+I (or 💧 Water in the sidebar) opens the Water window: today's total against the goal, glasses
+  drank / skipped / missed, today's log, and the Drank / Skip buttons.
+- Settings: ml per glass, interval in minutes, daily goal, reminder on / off. Save applies at once.
+- While the app runs, a toast "💧 Drink N ml of water" appears every interval with Drank / Skip. Closing it
+  with ×, or a newer reminder replacing it, logs "missed". No reminders while the app is closed.
+- Data: `~/.config/water-reminder/config` (`ML`, `EVERY_MIN`, `GOAL_ML`, `NOTIFY`, `POPUP`, `ENABLED`) and
+  `log.csv` (`date,time,ml,drank|skipped|missed`). The optional CLI `water-reminder` (`status`, `drink [ml]`,
+  `set <ml> <min> [goal]`, `on|off`) reads and writes the same files.
+
+## SSH
+
+- Ctrl+Shift+G opens the host picker. Hosts come from `~/.ssh/config` (tag `config`, read only, `Include` and
+  inline comments supported) and from hosts you add in the app (tag `app`, stored in the app database).
+- Add / Edit: Name, HostName, User, Port (default 22), IdentityFile (Browse opens `~/.ssh`). A name that
+  clashes with a config alias is refused.
+- Delete removes an app host (asks first). Hide / Unhide works for config hosts; the file is never written.
+  Tick "Show hidden" to see hidden hosts.
+- Enter opens the host in a new tab: `ssh -- '<alias>'` for config hosts,
+  `ssh [-p port] [-i key] -- 'user@host'` for app hosts.
 
 ## Tasks
 
@@ -93,7 +124,7 @@ at every start). Its hooks write the session state to a file that the app watche
 
 - Sidebar dot of a running Claude: green = working, yellow = waiting for you, blue = done, red = error.
 - A session that finished or waits while you look elsewhere gets a bold name and a "● " in its tab title until you
-  open it. If `notify-send` is installed, a desktop notification is sent as well.
+  open it. An in-app toast is shown as well (Settings → Notifications → In-app notification).
 - Limit: pressing Esc to interrupt sends no event, so the dot stays green until the next prompt.
 
 ## How it fits together
@@ -123,7 +154,7 @@ Not supported (Claude falls back): kitty keyboard protocol, theme-change notify 
 
 ## Build
 
-Gradle 9.8.1 wrapper, Java 21 toolchain.
+Gradle 9.8.1 wrapper, Java 25 toolchain.
 
 - Build and test: `./gradlew build`
 - Dev run: `./gradlew run --args="/path/to/project"`
