@@ -137,7 +137,7 @@ public final class SnippetPicker {
             if (editorPane.isVisible()) {
                 closeEditor();
             } else {
-                stage.hide();
+                Dialogs.closeLater(stage);
             }
             event.consume();
             return;
@@ -199,8 +199,10 @@ public final class SnippetPicker {
             return;
         }
         Dialogs.logFailure(() -> store.markUsed(selected.id()));
-        stage.hide();
-        sender.accept(newline ? selected.text() + "\n" : selected.text());
+        Platform.runLater(() -> {
+            stage.hide();
+            sender.accept(newline ? selected.text() + "\n" : selected.text());
+        });
     }
 
     private void openEditor(Snippet snippet) {

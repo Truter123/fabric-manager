@@ -171,7 +171,7 @@ public final class HistoryWindow {
         var scene = new Scene(build(), 1400, 850);
         scene.getStylesheets().add(HistoryWindow.class.getResource("/app.css").toExternalForm());
         var accelerators = scene.getAccelerators();
-        accelerators.put(new KeyCodeCombination(KeyCode.ESCAPE), window::close);
+        accelerators.put(new KeyCodeCombination(KeyCode.ESCAPE), () -> Dialogs.closeLater(window));
         accelerators.put(new KeyCodeCombination(KeyCode.F, KeyCombination.CONTROL_DOWN), () -> {
             filter.requestFocus();
             filter.selectAll();

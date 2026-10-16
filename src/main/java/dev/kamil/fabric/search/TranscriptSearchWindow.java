@@ -89,7 +89,7 @@ public final class TranscriptSearchWindow {
     private void onKey(KeyEvent event) {
         switch (event.getCode()) {
             case ESCAPE -> {
-                stage.hide();
+                Dialogs.closeLater(stage);
                 event.consume();
             }
             case ENTER -> {
@@ -124,8 +124,10 @@ public final class TranscriptSearchWindow {
     private void choose() {
         var hit = list.getSelectionModel().getSelectedItem();
         if (hit != null) {
-            stage.hide();
-            onChoose.accept(hit);
+            Platform.runLater(() -> {
+                stage.hide();
+                onChoose.accept(hit);
+            });
         }
     }
 

@@ -22,6 +22,32 @@ public record Tool(String name, String command) {
         return command != null && command.startsWith("ssh ");
     }
 
+    /** An ssh connection to a config alias; the alias is quoted so it is never read as an ssh option or shell syntax. */
+    public static Tool ssh(String alias) {
+        return new Tool("ssh " + alias, "ssh -- " + quote(alias));
+    }
+
+    /**
+     * An ssh connection to a host added in the app: {@code ssh [-p port] [-i identity] -- [user@]hostname}. Every value
+     * is quoted and the destination follows {@code --}, so no value can become an option or shell syntax.
+     */
+    public static Tool ssh(String name, String hostName, String user, int port, String identity) {
+        var command = new StringBuilder("ssh");
+        if (port != 22) {
+            command.append(" -p ").append(quote(String.valueOf(port)));
+        }
+        if (identity != null && !identity.isBlank()) {
+            command.append(" -i ").append(quote(identity));
+        }
+        var destination = (user == null || user.isBlank() ? "" : user + "@") + hostName;
+        command.append(" -- ").append(quote(destination));
+        return new Tool("ssh " + name, command.toString());
+    }
+
+    private static String quote(String text) {
+        return "'" + text.replace("'", "'\\''") + "'";
+    }
+
     static List<Tool> available() {
         return available(System.getenv("PATH"));
     }

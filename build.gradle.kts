@@ -15,7 +15,7 @@ repositories {
     mavenCentral()
 }
 
-val javafxVersion = "21.0.11"
+val javafxVersion = "25.0.4"
 val javafxPlatform = "linux"
 
 dependencies {

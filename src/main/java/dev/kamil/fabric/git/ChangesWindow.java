@@ -47,7 +47,7 @@ public final class ChangesWindow {
         window.setTitle("Changes — " + directory.getFileName());
         var scene = new Scene(repo == null ? notARepository() : build(), 1000, 650);
         scene.getStylesheets().add(ChangesWindow.class.getResource("/app.css").toExternalForm());
-        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.ESCAPE), window::close);
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.ESCAPE), () -> Dialogs.closeLater(window));
         window.setScene(scene);
     }
 

@@ -1,0 +1,47 @@
+databaseChangeLog:
+  - changeSet:
+      id: 13-ssh-hosts
+      author: kamil
+      changes:
+        - createTable:
+            tableName: ssh_host
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(256)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: host_name
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_name
+                  type: VARCHAR(256)
+              - column:
+                  name: port
+                  type: INT
+                  defaultValueNumeric: 22
+                  constraints:
+                    nullable: false
+              - column:
+                  name: identity_file
+                  type: VARCHAR(4096)
+        - createTable:
+            tableName: ssh_hidden
+            columns:
+              - column:
+                  name: alias
+                  type: VARCHAR(256)
+                  constraints:
+                    primaryKey: true
+                    nullable: false

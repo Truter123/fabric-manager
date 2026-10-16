@@ -151,7 +151,7 @@ public final class SettingsWindow {
                 if (!search.getText().isEmpty()) {
                     search.clear();
                 } else {
-                    stage.close();
+                    Dialogs.closeLater(stage);
                 }
                 e.consume();
             }

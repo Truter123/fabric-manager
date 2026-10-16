@@ -192,8 +192,10 @@ public final class BranchPopup {
 
     private void checkout(GitRepo.Branch branch) {
         var window = owner;
-        popup.hide();
-        BranchCheckout.run(window, repo, branch, tab, onDone);
+        Platform.runLater(() -> {
+            popup.hide();
+            BranchCheckout.run(window, repo, branch, tab, onDone);
+        });
     }
 
     private void newBranch() {

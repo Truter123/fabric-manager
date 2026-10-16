@@ -26,6 +26,7 @@ import dev.kamil.fabric.claude.usage.UsageView;
 import dev.kamil.fabric.snippets.SnippetPicker;
 import dev.kamil.fabric.snippets.SnippetStore;
 import dev.kamil.fabric.ssh.SshConfig;
+import dev.kamil.fabric.ssh.SshHostStore;
 import dev.kamil.fabric.ssh.SshPicker;
 import dev.kamil.fabric.session.Database;
 import dev.kamil.fabric.settings.AppSettings;
@@ -102,6 +103,7 @@ public final class FabricManagerApp extends Application {
     private Stage stage;
     private ClaudeEvents.Watcher watcher;
     private final SnippetStore snippets = new SnippetStore(db);
+    private final SshHostStore sshHosts = new SshHostStore(db);
     private final QuotaClient quotaClient = new QuotaClient();
     private final UsageView usageView = new UsageView();
     private final java.util.Map<String, TranscriptUsage> transcripts = new java.util.concurrent.ConcurrentHashMap<>();
@@ -266,7 +268,8 @@ public final class FabricManagerApp extends Application {
         // Each sidebar button and its shortcut run the same action.
         var actions = new java.util.ArrayList<SessionSidebar.Action>();
         java.util.function.BiConsumer<KeyCombination, SessionSidebar.Action> add = (keys, action) -> {
-            accelerators.put(keys, action.run());
+            var run = action.run();
+            accelerators.put(keys, () -> Platform.runLater(run));
             actions.add(action);
         };
         add.accept(combo(KeyCode.N), new SessionSidebar.Action(SessionSidebar.Group.PRIMARY, "+", "New", "Ctrl+Shift+N  new session", this::pick));
@@ -301,6 +304,8 @@ public final class FabricManagerApp extends Application {
                 this::openWorktree));
         add.accept(combo(KeyCode.C), new SessionSidebar.Action(SessionSidebar.Group.GRID, "±", "Changes", "Ctrl+Shift+C  git changes of this session",
                 this::openChanges));
+        add.accept(combo(KeyCode.I), new SessionSidebar.Action(SessionSidebar.Group.GRID, "💧", "Water", "Ctrl+Shift+I  water reminder",
+                () -> dev.kamil.fabric.water.WaterWindow.open(stage)));
         add.accept(combo(KeyCode.F), new SessionSidebar.Action(SessionSidebar.Group.GRID, "⌕", "Search", "Ctrl+Shift+F  search Claude transcripts",
                 this::openTranscriptSearch));
         sidebar.setActions(actions);
@@ -319,7 +324,7 @@ public final class FabricManagerApp extends Application {
         });
         accelerators.put(combo(KeyCode.W), () -> {
             if (tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
-                tab.requestClose();
+                Platform.runLater(tab::requestClose);
             }
         });
         accelerators.put(combo(KeyCode.TAB), () -> tabs.getSelectionModel().selectPrevious());
@@ -386,8 +391,11 @@ public final class FabricManagerApp extends Application {
     }
 
     private void openSsh() {
-        new SshPicker(stage, SshConfig.standard(), host -> open(
-                new Tool("ssh " + host.alias(), "ssh " + TerminalTab.shellQuote(host.alias())),
+        new SshPicker(stage, SshConfig.standard(), sshHosts, entry -> open(
+                entry.fromApp()
+                        ? Tool.ssh(entry.app().name(), entry.app().hostName(), entry.app().user(),
+                                entry.app().port(), entry.app().identity())
+                        : Tool.ssh(entry.alias()),
                 Path.of(System.getProperty("user.home")), currentAccount())).show();
     }
 

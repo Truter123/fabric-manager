@@ -199,3 +199,5 @@ databaseChangeLog:
       file: db/changes/11-quote-fixes.yaml
   - include:
       file: db/changes/12-quote-seed-removal.yaml
+  - include:
+      file: db/changes/13-ssh-hosts.yaml

@@ -120,7 +120,7 @@ public final class ClaudeSettingsWindow {
         var scene = new Scene(build(), 1200, 800);
         scene.getStylesheets().add(ClaudeSettingsWindow.class.getResource("/app.css").toExternalForm());
         var accelerators = scene.getAccelerators();
-        accelerators.put(new KeyCodeCombination(KeyCode.ESCAPE), this::close);
+        accelerators.put(new KeyCodeCombination(KeyCode.ESCAPE), () -> Platform.runLater(this::close));
         accelerators.put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN), this::save);
         accelerators.put(new KeyCodeCombination(KeyCode.F, KeyCombination.CONTROL_DOWN), () -> {
             filter.requestFocus();

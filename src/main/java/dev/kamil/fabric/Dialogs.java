@@ -1,5 +1,6 @@
 package dev.kamil.fabric;
 
+import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
@@ -10,6 +11,14 @@ import javafx.stage.Window;
 public final class Dialogs {
 
     private Dialogs() {
+    }
+
+    /**
+     * Hides a window after the current native key event has finished. Closing it synchronously from a key
+     * handler can crash glass GTK (IBus key filtering still dispatches into the freed window).
+     */
+    public static void closeLater(Window window) {
+        Platform.runLater(window::hide);
     }
 
     /** Asks before a destructive action; true when the user picked {@code action}. */

@@ -69,7 +69,7 @@ public final class SshConfig {
         }
         Block current = null;
         for (var raw : lines) {
-            var line = raw.strip();
+            var line = withoutComment(raw).strip();
             if (line.isEmpty() || line.startsWith("#")) {
                 continue;
             }
@@ -85,7 +85,7 @@ public final class SshConfig {
             switch (keyword) {
                 case "host" -> {
                     current = new Block();
-                    for (var pattern : value.split("\\s+")) {
+                    for (var pattern : words(value)) {
                         var p = unquote(pattern);
                         if (!p.isEmpty() && !p.startsWith("!") && p.indexOf('*') < 0 && p.indexOf('?') < 0) {
                             current.aliases.add(p);
@@ -95,7 +95,7 @@ public final class SshConfig {
                 }
                 case "match" -> current = null;
                 case "include" -> {
-                    for (var pattern : value.split("\\s+")) {
+                    for (var pattern : words(value)) {
                         for (var included : expand(unquote(pattern), baseDir)) {
                             parse(included, baseDir, visited, blocks);
                         }
@@ -110,6 +110,43 @@ public final class SshConfig {
                 }
             }
         }
+    }
+
+    /** Splits on whitespace, keeping a double-quoted word together. */
+    private static List<String> words(String value) {
+        var words = new ArrayList<String>();
+        var word = new StringBuilder();
+        boolean quoted = false;
+        for (char c : value.toCharArray()) {
+            if (c == '"') {
+                quoted = !quoted;
+            } else if (Character.isWhitespace(c) && !quoted) {
+                if (!word.isEmpty()) {
+                    words.add(word.toString());
+                    word.setLength(0);
+                }
+            } else {
+                word.append(c);
+            }
+        }
+        if (!word.isEmpty()) {
+            words.add(word.toString());
+        }
+        return words;
+    }
+
+    /** Drops a trailing "# ..." comment (a # at the start of a word, outside double quotes). */
+    private static String withoutComment(String line) {
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                quoted = !quoted;
+            } else if (c == '#' && !quoted && (i == 0 || Character.isWhitespace(line.charAt(i - 1)))) {
+                return line.substring(0, i);
+            }
+        }
+        return line;
     }
 
     private static String unquote(String text) {
