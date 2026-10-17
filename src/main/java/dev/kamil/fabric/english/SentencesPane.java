@@ -1,6 +1,7 @@
 package dev.kamil.fabric.english;
 
 import dev.kamil.fabric.Dialogs;
+import dev.kamil.fabric.settings.AppSettings;
 import dev.kamil.fabric.terminal.TerminalSettings;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -14,6 +15,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
+import javafx.beans.property.ReadOnlyStringWrapper;
+import javafx.collections.ListChangeListener;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
@@ -24,9 +28,14 @@ import javafx.scene.control.DatePicker;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TitledPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
@@ -36,6 +45,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
 import javafx.stage.Window;
 
 /**
@@ -46,6 +56,7 @@ final class SentencesPane extends BorderPane {
 
     private static final DateTimeFormatter ADDED = DateTimeFormatter.ofPattern("d MMM uuuu", Locale.ENGLISH);
     private static final int TAKES_SHOWN = 5;
+    static final String VIEW_KEY = "english.sentences_view";
 
     private final Window owner;
     private final Runnable onChange;
@@ -58,6 +69,16 @@ final class SentencesPane extends BorderPane {
     private final VBox cards = new VBox(10);
     private final TitledPane removedPane = new TitledPane();
     private final ScrollPane scroll = new ScrollPane();
+    private final TableView<Sentence> table = new TableView<>();
+    private final VBox tableBox = new VBox(8);
+    private final VBox cardsContent = new VBox(10);
+    private final ToggleButton cardsToggle = new ToggleButton("Cards");
+    private final ToggleButton tableToggle = new ToggleButton("Table");
+    private final Button editButton = new Button("Edit");
+    private boolean tableView;
+    private boolean rebuilding;
+    private Sentence lastSelected;
+    private TableColumn<Sentence, ?> lastColumn;
     private final TextField search = new TextField();
     private final Label count = new Label();
     private final Label status = new Label();
@@ -83,6 +104,27 @@ final class SentencesPane extends BorderPane {
 
     int changes() {
         return changes;
+    }
+
+    /** True while a table cell is being edited, so Esc only cancels that edit. */
+    boolean isEditing() {
+        return tableView && table.getEditingCell() != null;
+    }
+
+    boolean isTableView() {
+        return tableView;
+    }
+
+    /** Switches between the card list and the table. */
+    void toggleView() {
+        (tableView ? cardsToggle : tableToggle).setSelected(true);
+    }
+
+    /** Opens the full edit dialog for the selected table row. */
+    void editSelected() {
+        if (tableView && lastSelected != null && backing.contains(lastSelected)) {
+            editCard(lastSelected);
+        }
     }
 
     void focusSearch() {
@@ -113,26 +155,266 @@ final class SentencesPane extends BorderPane {
         count.getStyleClass().add("history-meta");
         status.getStyleClass().add("history-meta");
 
+        var group = new ToggleGroup();
+        cardsToggle.setToggleGroup(group);
+        tableToggle.setToggleGroup(group);
+        cardsToggle.setFocusTraversable(false);
+        tableToggle.setFocusTraversable(false);
+        cardsToggle.setTooltip(new Tooltip("Cards (Ctrl+T toggles)"));
+        tableToggle.setTooltip(new Tooltip("Table (Ctrl+T toggles)"));
+        tableView = "table".equals(AppSettings.shared().getString(VIEW_KEY, "cards"));
+        (tableView ? tableToggle : cardsToggle).setSelected(true);
+        group.selectedToggleProperty().addListener((o, was, now) -> {
+            if (now == null) {
+                was.setSelected(true);
+                return;
+            }
+            tableView = now == tableToggle;
+            AppSettings.shared().setString(VIEW_KEY, tableView ? "table" : "cards");
+            applyView();
+        });
         var add = button("Add", "Add (Ctrl+N)", this::add);
+        editButton.setTooltip(new Tooltip("Edit the selected row (Ctrl+E)"));
+        editButton.setOnAction(e -> editSelected());
         var save = button("Save", "Save (Ctrl+S)", this::save);
         var reload = button("⟳", "Reload (F5)", this::reload);
-        var bar = new HBox(8, search, count, add, save, reload);
+        var bar = new HBox(8, search, count, cardsToggle, tableToggle, add, editButton, save, reload);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(8));
 
         removedPane.setAnimated(false);
         removedPane.setExpanded(false);
         removedPane.getStyleClass().add("sentence-removed-pane");
-        var content = new VBox(10, cards, removedPane);
-        content.setPadding(new Insets(8));
-        scroll.setContent(content);
+        cardsContent.getChildren().addAll(cards, removedPane);
+        cardsContent.setPadding(new Insets(8));
+        scroll.setContent(cardsContent);
         scroll.setFitToWidth(true);
+        buildTable();
+        tableBox.setPadding(new Insets(8));
 
         var statusBar = new HBox(status);
         statusBar.setPadding(new Insets(6, 8, 6, 8));
-        setCenter(scroll);
         setTop(bar);
         setBottom(statusBar);
+        applyView();
+    }
+
+    /** Shows the card list or the table; the Removed section moves under the active one. */
+    private void applyView() {
+        removedPane.setMaxWidth(Double.MAX_VALUE);
+        cardsContent.getChildren().remove(removedPane);
+        tableBox.getChildren().remove(removedPane);
+        if (tableView) {
+            tableBox.getChildren().add(removedPane);
+            setCenter(tableBox);
+        } else {
+            cardsContent.getChildren().add(removedPane);
+            setCenter(scroll);
+        }
+        editButton.setVisible(tableView);
+        editButton.setManaged(tableView);
+        rebuild();
+    }
+
+    // ---- table ----
+
+    private void buildTable() {
+        var tmono = mono;
+        table.setEditable(true);
+        table.getSelectionModel().setCellSelectionEnabled(true);
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPlaceholder(new Label("No sentences"));
+        table.getColumns().add(column("Date", 0.08, Sentence::date, null, Function.identity(), true));
+        table.getColumns().add(column("English", 0.18, Sentence::english, null, Function.identity(), true));
+        table.getColumns().add(column("PL", 0.18, Sentence::pl, null, Function.identity(), true));
+        table.getColumns().add(column("Say", 0.20, Sentence::say, tmono, Function.identity(), true));
+        table.getColumns().add(column("Rec", 0.05, s -> {
+            int n = takes(s).size();
+            return n == 0 ? "" : Integer.toString(n);
+        }, null, Function.identity(), false));
+        table.getColumns().add(column("Watch", 0.31, Sentence::watch, null, t -> t.replace("**", ""), true));
+        table.getSelectionModel().getSelectedCells().addListener((ListChangeListener<javafx.scene.control.TablePosition>) c -> {
+            if (rebuilding) {
+                return;
+            }
+            var cells = table.getSelectionModel().getSelectedCells();
+            if (cells.isEmpty()) {
+                lastSelected = null;
+            } else {
+                int row = cells.get(0).getRow();
+                lastSelected = row >= 0 && row < table.getItems().size() ? table.getItems().get(row) : null;
+                lastColumn = cells.get(0).getTableColumn();
+            }
+        });
+        table.setOnMouseClicked(e -> {
+            if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2 && !isEditing()) {
+                startEdit();
+            }
+        });
+        table.setOnKeyPressed(e -> {
+            if (isEditing()) {
+                return;
+            }
+            if (e.getCode() == KeyCode.DELETE && lastSelected != null) {
+                remove(lastSelected);
+                e.consume();
+            } else if (e.getCode() == KeyCode.ENTER || e.getCode() == KeyCode.F2) {
+                startEdit();
+                e.consume();
+            }
+        });
+        VBox.setVgrow(table, Priority.ALWAYS);
+        tableBox.getChildren().add(table);
+    }
+
+    private void startEdit() {
+        int row = table.getSelectionModel().getSelectedIndex();
+        var col = table.getFocusModel().getFocusedCell().getTableColumn();
+        if (col == null) {
+            col = lastColumn != null ? lastColumn : table.getColumns().get(1);
+        }
+        if (row >= 0 && col.isEditable()) {
+            table.edit(row, col);
+        }
+    }
+
+    private TableColumn<Sentence, String> column(String title, double share, Function<Sentence, String> value,
+            String style, Function<String, String> display, boolean editable) {
+        var col = new TableColumn<Sentence, String>(title);
+        col.setCellValueFactory(c -> new ReadOnlyStringWrapper(value.apply(c.getValue())));
+        col.setSortable(false);
+        col.setEditable(editable);
+        col.setCellFactory(c -> new EditCell(style, display));
+        col.prefWidthProperty().bind(table.widthProperty().multiply(share));
+        col.setOnEditCommit(e -> applyEdit(e.getRowValue(), title, e.getNewValue()));
+        return col;
+    }
+
+    /** Builds the edited record from one cell's new text; a bad date keeps the old value. */
+    private void applyEdit(Sentence old, String field, String raw) {
+        var text = raw == null ? "" : raw.strip().replaceAll("\\s*\\R\\s*", " ");
+        Sentence edited;
+        switch (field) {
+            case "Date" -> {
+                try {
+                    text = LocalDate.parse(text).toString();
+                } catch (RuntimeException e) {
+                    status.setText("Date must be yyyy-MM-dd");
+                    table.refresh();
+                    return;
+                }
+                edited = new Sentence(text, old.english(), old.pl(), old.say(), old.watch());
+            }
+            case "English" -> edited = new Sentence(old.date(), text, old.pl(), old.say(), old.watch());
+            case "PL" -> edited = new Sentence(old.date(), old.english(), text, old.say(), old.watch());
+            case "Say" -> edited = new Sentence(old.date(), old.english(), old.pl(), text.replace("`", ""),
+                    old.watch());
+            case "Watch" -> edited = new Sentence(old.date(), old.english(), old.pl(), old.say(), text);
+            default -> {
+                return;
+            }
+        }
+        if (edited.equals(old)) {
+            return;
+        }
+        if (edited.english().isEmpty()) {
+            status.setText("English cannot be empty");
+            table.refresh();
+            return;
+        }
+        int i = backing.indexOf(old);
+        if (i >= 0) {
+            backing.set(i, edited);
+            lastSelected = edited;
+            changed("Edited");
+        }
+    }
+
+    /** Cell whose text wraps at the column width and edits in a TextField on the raw value. */
+    private static final class EditCell extends TableCell<Sentence, String> {
+        private final Text text = new Text();
+        private final Function<String, String> display;
+        private final String style;
+
+        EditCell(String style, Function<String, String> display) {
+            this.style = style;
+            this.display = display;
+            if (style != null) {
+                text.setStyle(style);
+            }
+            text.getStyleClass().add("text");
+            text.wrappingWidthProperty().bind(widthProperty().subtract(14));
+        }
+
+        private void paint() {
+            text.setText(getItem() == null ? "" : display.apply(getItem()));
+            text.setFill(isSelected() ? javafx.scene.paint.Color.WHITE : javafx.scene.paint.Color.web("#d4d4d4"));
+        }
+
+        @Override
+        protected void updateItem(String item, boolean empty) {
+            super.updateItem(item, empty);
+            if (empty || item == null) {
+                setGraphic(null);
+                return;
+            }
+            paint();
+            if (!isEditing()) {
+                setGraphic(text);
+            }
+        }
+
+        @Override
+        public void updateSelected(boolean selected) {
+            super.updateSelected(selected);
+            paint();
+        }
+
+        @Override
+        public void startEdit() {
+            super.startEdit();
+            if (!isEditing()) {
+                return;
+            }
+            var field = new TextField(getItem());
+            if (style != null) {
+                field.setStyle(style);
+            }
+            field.setOnKeyPressed(e -> {
+                if (e.getCode() == KeyCode.ENTER) {
+                    commitEdit(field.getText());
+                    e.consume();
+                } else if (e.getCode() == KeyCode.ESCAPE) {
+                    cancelEdit();
+                    e.consume();
+                }
+            });
+            setGraphic(field);
+            javafx.application.Platform.runLater(() -> {
+                field.requestFocus();
+                field.selectAll();
+            });
+        }
+
+        @Override
+        public void cancelEdit() {
+            super.cancelEdit();
+            paint();
+            setGraphic(text);
+            if (getTableView() != null) {
+                getTableView().requestFocus();
+            }
+        }
+
+        @Override
+        public void commitEdit(String value) {
+            super.commitEdit(value);
+            paint();
+            setGraphic(text);
+            if (getTableView() != null) {
+                getTableView().requestFocus();
+            }
+        }
     }
 
     private static Button button(String text, String tip, Runnable action) {
@@ -164,6 +446,12 @@ final class SentencesPane extends BorderPane {
         rows.addAll(justRemoved);
         Collections.reverse(rows);
         rows.sort(Comparator.comparing(Sentence::date).reversed());
+        if (tableView) {
+            rebuildTable(rows, q);
+            rebuildRemoved();
+            updateCount();
+            return;
+        }
         cards.getChildren().clear();
         visible = 0;
         int shown = 0;
@@ -186,6 +474,28 @@ final class SentencesPane extends BorderPane {
         }
         rebuildRemoved();
         updateCount();
+    }
+
+    private void rebuildTable(List<Sentence> rows, String q) {
+        var shown = new ArrayList<Sentence>();
+        for (var s : rows) {
+            if (!justRemoved.contains(s) && (q.isEmpty() || haystack(s).contains(q))) {
+                shown.add(s);
+            }
+        }
+        visible = shown.size();
+        rebuilding = true;
+        try {
+            table.getItems().setAll(shown);
+            int i = lastSelected == null ? -1 : shown.indexOf(lastSelected);
+            if (i >= 0) {
+                var col = lastColumn != null ? lastColumn : table.getColumns().get(1);
+                table.getSelectionModel().select(i, col);
+            }
+        } finally {
+            rebuilding = false;
+        }
+        table.refresh();
     }
 
     private HBox removedRow(Sentence s) {
@@ -519,6 +829,7 @@ final class SentencesPane extends BorderPane {
             int i = backing.indexOf(selected);
             if (i >= 0) {
                 backing.set(i, s);
+                lastSelected = s;
                 changed("Edited");
             }
         });

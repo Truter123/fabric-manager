@@ -95,6 +95,8 @@ public final class EnglishWindow {
         var acc = scene.getAccelerators();
         acc.put(new KeyCodeCombination(KeyCode.N, KeyCombination.CONTROL_DOWN), () -> inSentences(sentences::add));
         acc.put(new KeyCodeCombination(KeyCode.S, KeyCombination.CONTROL_DOWN), () -> inSentences(sentences::save));
+        acc.put(new KeyCodeCombination(KeyCode.T, KeyCombination.CONTROL_DOWN), () -> inSentences(sentences::toggleView));
+        acc.put(new KeyCodeCombination(KeyCode.E, KeyCombination.CONTROL_DOWN), () -> inSentences(sentences::editSelected));
         acc.put(new KeyCodeCombination(KeyCode.F5), () -> inSentences(sentences::reload));
         scene.addEventFilter(KeyEvent.KEY_PRESSED, this::onKey);
         window.setOnCloseRequest(e -> {
@@ -150,7 +152,7 @@ public final class EnglishWindow {
                 }
             }
             case SENTENCES -> {
-                if (code == KeyCode.ESCAPE && !sentences.escapeClearsSearch(e)) {
+                if (code == KeyCode.ESCAPE && !sentences.escapeClearsSearch(e) && !sentences.isEditing()) {
                     showHome();
                     e.consume();
                 }
