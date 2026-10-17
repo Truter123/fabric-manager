@@ -376,3 +376,15 @@
 .toast-text { -fx-text-fill: -fm-muted; -fx-font-size: 12px; }
 .toast-close { -fx-background-color: transparent; -fx-text-fill: -fm-muted; -fx-padding: 0 4 0 4; -fx-cursor: hand; }
 .toast-close:hover { -fx-text-fill: -fm-text; }
+
+/* English window: Home screen */
+.home-title { -fx-font-size: 28px; -fx-text-fill: -fm-text; }
+.home-button { -fx-font-size: 20px; -fx-min-width: 360; -fx-pref-width: 360; -fx-padding: 14 24 14 24; }
+
+/* English: sentence cards */
+.sentence-card { -fx-background-color: -fm-panel; -fx-border-color: -fm-border; -fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 10 12 10 12; }
+.sentence-card .label { -fx-text-fill: #d4d4d4; }
+.sentence-card .sentence-english { -fx-font-size: 20px; -fx-text-fill: #d4d4d4; }
+.sentence-card .sentence-muted, .sentence-muted { -fx-text-fill: -fm-muted; }
+.sentence-removed { -fx-background-color: transparent; -fx-border-color: -fm-border; -fx-border-radius: 6; -fx-padding: 6 12 6 12; }
+.sentence-removed .label { -fx-text-fill: -fm-muted; }

@@ -1,0 +1,376 @@
+package dev.kamil.fabric.english;
+
+import static dev.kamil.fabric.english.FxSupport.await;
+import static dev.kamil.fabric.english.FxSupport.button;
+import static dev.kamil.fabric.english.FxSupport.fx;
+import static dev.kamil.fabric.english.FxSupport.pulse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import javafx.event.Event;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
+import javafx.scene.text.Text;
+import javafx.stage.Stage;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+/** Drives the Review mode of the English window with a fake recorder and temporary files; skipped without a display. */
+class ReviewPaneE2ETest {
+
+    private static final Sentence A = new Sentence("2026-10-01", "I am late", "Spozniam sie", "ai am leit", "**late** show");
+    private static final Sentence B = new Sentence("2026-10-02", "Good morning", "Dzien dobry", "gud morning", "");
+    private static final Sentence C = new Sentence("2026-10-03", "See you soon", "Do zobaczenia", "si ju sun", "Friends ep 1");
+    private static final List<Sentence> ALL = List.of(A, B, C);
+
+    @TempDir
+    Path dir;
+
+    private Path sentencesFile;
+    private Path progress;
+    private RecordingHistory history;
+
+    @BeforeAll
+    static void startFx() {
+        FxSupport.startFx();
+    }
+
+    @BeforeEach
+    void prepare() throws Exception {
+        progress = dir.resolve("flashcards.csv");
+        ProgressStore.file = progress;
+        sentencesFile = dir.resolve("everyday.md");
+        EnglishWindow.file = sentencesFile;
+        SentenceFile.save(sentencesFile, ALL);
+        var today = java.time.LocalDate.now();
+        CardProgress.save(progress, List.of(new CardProgress(A.english(), 1, today),
+                new CardProgress(B.english(), 1, today), new CardProgress(C.english(), 1, today)));
+        RecordingHistory.standardRoot = dir.resolve("recordings");
+        history = new RecordingHistory(dir.resolve("recordings"));
+        Recorder.fake = true;
+        Recorder.LOG.clear();
+        FxSupport.takeErr();
+    }
+
+    @AfterEach
+    void close() throws Exception {
+        fx(() -> {
+            var w = EnglishWindow.openStage();
+            if (w != null) {
+                w.hide();
+            }
+        });
+        var err = FxSupport.takeErr();
+        assertFalse(err.contains("Exception"), "exception on stderr: " + err);
+    }
+
+    /** Opens the English window on {@code sentences} and presses 2 for Review. */
+    private void open(List<Sentence> sentences) throws Exception {
+        SentenceFile.save(sentencesFile, sentences);
+        fx(() -> EnglishWindow.open(null));
+        pulse();
+        key(KeyCode.DIGIT2);
+    }
+
+    private static Stage stage() {
+        return EnglishWindow.openStage();
+    }
+
+    private void key(KeyCode code) throws Exception {
+        fx(() -> Event.fireEvent(stage().getScene().getRoot(),
+                new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code, false, false, false, false)));
+        pulse();
+    }
+
+    private void click(String text) throws Exception {
+        fx(() -> button(stage().getScene().getRoot(), text).fire());
+        pulse();
+    }
+
+    /** Non-blank texts of the card area, in scene order. */
+    private List<String> texts() throws Exception {
+        return fx(() -> {
+            var out = new ArrayList<String>();
+            collect(stage().getScene().getRoot(), out);
+            return out;
+        });
+    }
+
+    private static void collect(Node node, List<String> out) {
+        if (node.getClass() == Text.class) {
+            if (!((Text) node).getText().isBlank()) {
+                out.add(((Text) node).getText());
+            }
+        } else if (node instanceof javafx.scene.Parent p) {
+            for (Node child : p.getChildrenUnmodifiable()) {
+                collect(child, out);
+            }
+        }
+    }
+
+    private String counter() throws Exception {
+        return fx(() -> {
+            for (Node n : stage().getScene().getRoot().lookupAll(".history-meta")) {
+                if (n instanceof Label l && (l.getText().startsWith("card") || l.getText().isEmpty())) {
+                    return l.getText();
+                }
+            }
+            return null;
+        });
+    }
+
+    private Sentence current() throws Exception {
+        var front = texts().get(0);
+        return ALL.stream().filter(s -> s.pl().equals(front)).findFirst().orElseThrow();
+    }
+
+    private boolean disabled(String button) throws Exception {
+        return fx(() -> button(stage().getScene().getRoot(), button).isDisabled());
+    }
+
+    private List<String> buttons() throws Exception {
+        return fx(() -> FxSupport.buttonTexts(stage().getScene().getRoot()));
+    }
+
+    // ---- tests
+
+    @Test
+    void opensOnTheFrontOfTheFirstCard() throws Exception {
+        open(ALL);
+        assertEquals("English", fx(() -> stage().getTitle()));
+        assertEquals("card 1 of 3 · due today", counter());
+        var card = current();
+        assertEquals(List.of(card.pl()), texts().subList(0, 1));
+        assertTrue(buttons().contains("Record (R)"));
+        assertFalse(buttons().contains("Next (Space)"));
+    }
+
+    @Test
+    void spaceRevealsTheBackWithoutSpeaking() throws Exception {
+        open(ALL);
+        var card = current();
+        key(KeyCode.SPACE);
+        var shown = texts();
+        assertEquals(card.english(), shown.get(0));
+        assertTrue(shown.contains(card.say()));
+        if (!card.watchPlain().isBlank()) {
+            assertTrue(shown.contains(card.watchPlain()));
+        }
+        assertTrue(buttons().containsAll(List.of("Me (P)", "Try again (R)", "First (F)", "Next (Space)")));
+        assertTrue(disabled("Me (P)"));
+        assertTrue(disabled("First (F)"));
+        assertFalse(Recorder.LOG.contains("speak:" + card.english()), Recorder.LOG.toString());
+        // Space on the back answers: the next card shows
+        key(KeyCode.SPACE);
+        assertEquals("card 2 of 3 · due today", counter());
+    }
+
+    @Test
+    void lPlaysTheVoiceOnTheBackOnly() throws Exception {
+        var savedCache = Voice.cacheDir;
+        Voice.cacheDir = dir.resolve("tts");
+        Voice.fake = true;
+        Voice.LOG.clear();
+        try {
+            open(ALL);
+            var card = current();
+            key(KeyCode.L);
+            assertEquals(List.of(), List.copyOf(Voice.LOG), "no voice on the front");
+            key(KeyCode.SPACE);
+            assertTrue(buttons().contains("Listen (L)"));
+            Recorder.LOG.clear();
+            key(KeyCode.L);
+            var played = "play:" + Voice.key(card.english(), false) + ".wav";
+            FxSupport.await(() -> Recorder.LOG.contains(played));
+            assertEquals(List.of("voice:normal:" + card.english()), List.copyOf(Voice.LOG));
+        } finally {
+            Voice.fake = false;
+            Voice.cacheDir = savedCache;
+        }
+    }
+
+    @Test
+    void thereIsNoModelVoice() throws Exception {
+        open(ALL);
+        key(KeyCode.SPACE);
+        Recorder.LOG.clear();
+        key(KeyCode.M);
+        assertFalse(buttons().contains("Model (M)"));
+        assertEquals(List.of(), List.copyOf(Recorder.LOG));
+    }
+
+    @Test
+    void gradingAllCardsSavesProgressAndShowsTheEnd() throws Exception {
+        open(ALL);
+        for (int i = 1; i <= 3; i++) {
+            assertEquals("card " + i + " of 3 · due today", counter());
+            key(KeyCode.SPACE);
+            click("Next (Space)");
+        }
+        assertEquals("", counter());
+        assertEquals(List.of("Done: 3 cards. Next review: tomorrow (3)."), texts());
+        assertTrue(buttons().contains("10 more (Space)"));
+        assertTrue(buttons().contains("Home (Esc)"));
+        var saved = CardProgress.load(progress);
+        assertEquals(3, saved.size());
+        for (var p : saved) {
+            assertEquals(2, p.box());
+            assertEquals(LocalDate.now().plusDays(1), p.due());
+        }
+        // nothing else is due: the extra cards request says so
+        click("10 more (Space)");
+        assertEquals(List.of("Nothing more due today."), texts());
+    }
+
+    @Test
+    void savedProgressKeepsFutureCardsOutOfTheSession() throws Exception {
+        CardProgress.save(progress, List.of(new CardProgress("I am late", 1, LocalDate.now()),
+                new CardProgress("Good morning", 3, LocalDate.now().plusDays(3)),
+                new CardProgress("See you soon", 1, LocalDate.now())));
+        open(ALL);
+        assertEquals("card 1 of 2 · due today", counter());
+        key(KeyCode.SPACE);
+        key(KeyCode.SPACE);
+        key(KeyCode.SPACE);
+        key(KeyCode.SPACE);
+        assertEquals(List.of("Done: 2 cards. Next review: tomorrow (2)."), texts());
+    }
+
+    @Test
+    void emptyDeckSaysNothingDueAndSpaceTriesMore() throws Exception {
+        open(List.of());
+        assertEquals(List.of("Nothing due today."), texts());
+        assertFalse(buttons().contains("10 more (Space)"));
+        key(KeyCode.SPACE);
+        assertEquals(List.of("Nothing more due today."), texts());
+    }
+
+    @Test
+    void recordingOnTheFrontRevealsAndKeepsTheAttempt() throws Exception {
+        open(ALL);
+        var card = current();
+        key(KeyCode.R);
+        assertTrue(buttons().contains("● Recording… (R to stop)"));
+        key(KeyCode.R);
+        assertEquals(card.english(), texts().get(0));
+        assertEquals(1, history.list(card.english()).size());
+        assertFalse(disabled("Me (P)"));
+        assertTrue(disabled("First (F)"));
+        // one attempt row with its own play button
+        assertTrue(buttons().contains("▶"));
+        Recorder.LOG.clear();
+        click("Me (P)");
+        click("▶");
+        var wav = history.list(card.english()).get(0).file().getFileName().toString();
+        assertEquals(List.of("play:" + wav, "play:" + wav), List.copyOf(Recorder.LOG));
+    }
+
+    @Test
+    void tryAgainOnTheBackAddsAnAttemptAndPlaysIt() throws Exception {
+        open(ALL);
+        var card = current();
+        key(KeyCode.SPACE);
+        click("Try again (R)");
+        assertTrue(buttons().contains("● Recording… (R to stop)"));
+        Recorder.LOG.clear();
+        key(KeyCode.R);
+        assertTrue(buttons().contains("Try again (R)"));
+        var first = history.list(card.english());
+        assertEquals(1, first.size());
+        assertEquals(List.of("play:" + first.get(0).file().getFileName()), List.copyOf(Recorder.LOG));
+
+        Thread.sleep(1100); // attempt files are named to the second
+        key(KeyCode.R);
+        key(KeyCode.R);
+        var all = history.list(card.english());
+        assertEquals(2, all.size());
+        assertFalse(disabled("First (F)"));
+        assertEquals(2, fx(() -> stage().getScene().getRoot().lookupAll(".button").stream()
+                .filter(n -> n instanceof Button b && "▶".equals(b.getText())).count()).intValue());
+        Recorder.LOG.clear();
+        key(KeyCode.F);
+        key(KeyCode.P);
+        assertEquals(List.of("play:" + all.get(1).file().getFileName(), "play:" + all.get(0).file().getFileName()),
+                List.copyOf(Recorder.LOG));
+    }
+
+    @Test
+    void answeringWhileRecordingStopsAndSavesTheAttempt() throws Exception {
+        open(ALL);
+        var card = current();
+        key(KeyCode.SPACE);
+        click("Try again (R)");
+        click("Next (Space)");
+        assertEquals("card 2 of 3 · due today", counter());
+        assertEquals(1, history.list(card.english()).size());
+        assertTrue(buttons().contains("Record (R)"));
+    }
+
+    @Test
+    void escapeSavesARunningRecordingAndGoesHome() throws Exception {
+        open(ALL);
+        var card = current();
+        key(KeyCode.R);
+        key(KeyCode.ESCAPE);
+        assertEquals(1, history.list(card.english()).size());
+        assertTrue(buttons().contains("Review (3 due)"));
+        assertTrue(fx(() -> stage().isShowing()));
+    }
+
+    @Test
+    void homeButtonOnTheEndScreenGoesHome() throws Exception {
+        open(List.of(B));
+        key(KeyCode.SPACE);
+        key(KeyCode.SPACE);
+        click("Home (Esc)");
+        assertTrue(buttons().contains("Review (0 due)"));
+    }
+
+    @Test
+    void reviewStartsFreshEachTimeFromHome() throws Exception {
+        open(ALL);
+        key(KeyCode.SPACE);
+        key(KeyCode.ESCAPE);
+        key(KeyCode.DIGIT2);
+        assertEquals("card 1 of 3 · due today", counter());
+    }
+
+    @Test
+    void dailySizeLimitsTheSession() throws Exception {
+        dev.kamil.fabric.settings.AppSettings.shared().setInt(EnglishWindow.DAILY_SIZE_KEY, 5);
+        try {
+            var many = new ArrayList<Sentence>();
+            var rows = new ArrayList<CardProgress>();
+            for (int i = 0; i < 7; i++) {
+                many.add(new Sentence("2026-10-01", "En" + i, "Pl" + i, "", ""));
+                rows.add(new CardProgress("En" + i, 1, LocalDate.now()));
+            }
+            CardProgress.save(progress, rows);
+            open(many);
+            assertEquals("card 1 of 5 · due today", counter());
+        } finally {
+            dev.kamil.fabric.settings.AppSettings.shared().setInt(EnglishWindow.DAILY_SIZE_KEY, 10);
+        }
+    }
+
+    @Test
+    void sentencesWithoutPolishAreSkipped() throws Exception {
+        open(List.of(new Sentence("2026-10-01", "No front", "", "", ""), B));
+        assertEquals("card 1 of 1 · due today", counter());
+        assertEquals(List.of(B.pl()), texts().subList(0, 1));
+    }
+}
