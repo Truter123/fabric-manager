@@ -9,6 +9,7 @@ import static dev.kamil.fabric.english.FxSupport.fx;
 import static dev.kamil.fabric.english.FxSupport.later;
 import static dev.kamil.fabric.english.FxSupport.press;
 import static dev.kamil.fabric.english.FxSupport.pulse;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -55,6 +56,7 @@ class EnglishWindowE2ETest {
 
     private Path sentences;
     private Path removedFile;
+    private Path progressFile;
     private Path savedCache;
 
     @BeforeAll
@@ -64,10 +66,10 @@ class EnglishWindowE2ETest {
 
     @BeforeEach
     void prepare() throws Exception {
-        sentences = dir.resolve("english/everyday.md");
-        removedFile = dir.resolve("english/removed.md");
-        EnglishWindow.file = sentences;
-        ProgressStore.file = dir.resolve("english/flashcards.csv");
+        EnglishWindow.dir = dir.resolve("english");
+        sentences = dir.resolve("english/my-list.md");
+        removedFile = dir.resolve("english/my-list.removed.md");
+        progressFile = dir.resolve("english/my-list.progress.csv");
         RecordingHistory.standardRoot = dir.resolve("english/recordings");
         savedCache = Voice.cacheDir;
         Voice.cacheDir = dir.resolve("english/tts");
@@ -77,7 +79,7 @@ class EnglishWindowE2ETest {
         Recorder.LOG.clear();
         SentenceFile.save(sentences, List.of(A, B, C));
         var today = java.time.LocalDate.now();
-        CardProgress.save(ProgressStore.file, List.of(new CardProgress(A.english(), 1, today),
+        CardProgress.save(progressFile, List.of(new CardProgress(A.english(), 1, today),
                 new CardProgress(B.english(), 1, today), new CardProgress(C.english(), 1, today)));
         FxSupport.takeErr();
         openWindow();
@@ -324,7 +326,7 @@ class EnglishWindowE2ETest {
         assertEquals("New one", onDisk.get(3).english());
         assertEquals("niu wan", onDisk.get(3).say());
         assertEquals("line one line two", onDisk.get(3).watch());
-        assertTrue(Files.exists(sentences.resolveSibling("everyday.md.bak")));
+        assertTrue(Files.exists(sentences.resolveSibling("my-list.md.bak")));
     }
 
     @Test
@@ -403,7 +405,7 @@ class EnglishWindowE2ETest {
         assertTrue(buttons().contains("Sentences (2)"));
         homeKey(KeyCode.DIGIT3);
 
-        // Restore brings it back, Save writes it to everyday.md again
+        // Restore brings it back, Save writes it to the list file again
         fx(() -> {
             removedPane().setExpanded(true);
             ((Parent) removedPane().getContent()).lookupAll(".button").stream().map(n -> (Button) n)
@@ -626,6 +628,32 @@ class EnglishWindowE2ETest {
     }
 
     @Test
+    void theHomeButtonInSentencesGoesBackToTheHomeScreen() throws Exception {
+        assertTrue(buttons().contains("Home (Esc)"));
+        click("Home (Esc)");
+        assertTrue(buttons().contains("Sentences (3)"));
+        assertFalse(buttons().contains("Home (Esc)"));
+        assertNull(fx(() -> root().lookup(".sentence-card")));
+    }
+
+    @Test
+    void homeShowsTheKeyLine() throws Exception {
+        homeKey(KeyCode.ESCAPE);
+        var hints = fx(() -> root().lookupAll(".key-hint").stream().map(n -> ((Label) n).getText()).toList());
+        assertEquals(List.of("1 Learn   2 Review   3 Sentences"), hints);
+    }
+
+    @Test
+    void sentencesShowsItsKeysInAFooterHint() throws Exception {
+        var hints = fx(() -> root().lookupAll(".key-hint").stream().map(n -> ((Label) n).getText()).toList());
+        assertEquals(1, hints.size(), hints.toString());
+        for (var key : List.of("Ctrl+N add", "Ctrl+E edit (table)", "Ctrl+S save", "Ctrl+T cards/table",
+                "F5 reload", "Esc home")) {
+            assertTrue(hints.get(0).contains(key), key + " in " + hints.get(0));
+        }
+    }
+
+    @Test
     void escapeInTheSearchFieldClearsBeforeGoingHome() throws Exception {
         fx(() -> search().setText("late"));
         fx(() -> key(search(), KeyCode.ESCAPE, false));
@@ -647,7 +675,7 @@ class EnglishWindowE2ETest {
 
     @Test
     void homeShowsNextReviewWhenNothingIsDueAndTheSizePicker() throws Exception {
-        CardProgress.save(ProgressStore.file, List.of(new CardProgress(A.english(), 2, LocalDate.now().plusDays(1)),
+        CardProgress.save(progressFile, List.of(new CardProgress(A.english(), 2, LocalDate.now().plusDays(1)),
                 new CardProgress(B.english(), 2, LocalDate.now().plusDays(1)),
                 new CardProgress(C.english(), 2, LocalDate.now().plusDays(3))));
         homeKey(KeyCode.ESCAPE);
@@ -663,22 +691,88 @@ class EnglishWindowE2ETest {
         assertEquals(10, EnglishWindow.dailySize());
     }
 
-    @Test
-    void missingFileShowsErrorAndSaveCreatesIt() throws Exception {
+    /** Closes the window and removes every list file, so the next open starts with no list at all. */
+    private void clearList() throws Exception {
         fx(() -> stage().hide());
-        Files.delete(sentences);
-        Files.deleteIfExists(sentences.resolveSibling("everyday.md.bak"));
-        later(() -> EnglishWindow.open(null));
-        awaitDialog("Cannot read sentences");
-        press("Cannot read sentences", "OK");
-        awaitClosed("Cannot read sentences");
+        Files.deleteIfExists(sentences);
+        Files.deleteIfExists(removedFile);
+        Files.deleteIfExists(progressFile);
+        Files.deleteIfExists(sentences.resolveSibling("my-list.md.bak"));
+    }
+
+    private void openHome() throws Exception {
+        fx(() -> EnglishWindow.open(null));
         pulse();
-        homeKey(KeyCode.DIGIT3);
-        assertEquals("File missing — Save creates it", status());
-        assertEquals("0 of 0", count());
-        click("Save");
-        assertEquals("Saved 0 sentences", status());
+    }
+
+    @Test
+    void withoutSentencesHomeOffersTheFirstOne() throws Exception {
+        clearList();
+        openHome();
+        assertEquals("English", title());
+        assertTrue(fx(() -> labelsOf(root()).contains("No sentences yet.")));
+        assertTrue(fx(() -> button(root(), "Add your first sentence").getStyleClass().contains("primary")));
+        assertTrue(fx(() -> button(root(), "Learn (0 new)").isDisabled()));
+        assertTrue(fx(() -> button(root(), "Review (0 due)").isDisabled()));
+        assertFalse(fx(() -> button(root(), "Sentences (0)").isDisabled()));
+        assertNull(fx(() -> root().lookup(".combo-box")));
+        assertFalse(buttons().contains("New list…"));
+
+        homeKey(KeyCode.DIGIT1);
+        homeKey(KeyCode.DIGIT2);
+        assertTrue(buttons().contains("Add your first sentence"));
+        assertFalse(Files.exists(sentences));
+    }
+
+    @Test
+    void addYourFirstSentenceOpensTheAddDialogAndSavingCreatesMyList() throws Exception {
+        clearList();
+        openHome();
+        later(() -> button(root(), "Add your first sentence").fire());
+        awaitDialog("Add sentence");
+        fillDialog("First one", "Pierwsze", "", "");
+        press("Add sentence", "Save");
+        awaitClosed("Add sentence");
+        pulse();
+        assertEquals(List.of("First one"), english());
+        assertEquals("English *", title());
+
+        fx(() -> key(root(), KeyCode.S, true));
+        pulse();
+        assertEquals("English", title());
         assertTrue(Files.exists(sentences));
+        assertEquals("# My sentences", Files.readAllLines(sentences).get(0));
+        assertEquals(1, SentenceFile.load(sentences).size());
+
+        homeKey(KeyCode.ESCAPE);
+        assertTrue(buttons().contains("Learn (1 new)"));
+        assertFalse(buttons().contains("Add your first sentence"));
+        assertFalse(fx(() -> labelsOf(root()).contains("No sentences yet.")));
+    }
+
+    @Test
+    void theOldFilesAreIgnoredAndLeftAlone() throws Exception {
+        clearList();
+        var folder = sentences.getParent();
+        var everyday = folder.resolve("everyday.md");
+        var oldRemoved = folder.resolve("removed.md");
+        var flashcards = folder.resolve("flashcards.csv");
+        Files.writeString(everyday, SentenceFile.format(List.of(A, B, C)));
+        Files.writeString(oldRemoved, SentenceFile.format(List.of(A)));
+        CardProgress.save(flashcards, List.of(new CardProgress(A.english(), 2, java.time.LocalDate.now())));
+        var everydayBytes = Files.readAllBytes(everyday);
+        var removedBytes = Files.readAllBytes(oldRemoved);
+        var flashcardsBytes = Files.readAllBytes(flashcards);
+
+        openHome();
+        assertTrue(fx(() -> labelsOf(root()).contains("No sentences yet.")));
+        assertTrue(buttons().contains("Learn (0 new)"));
+        assertTrue(buttons().contains("Sentences (0)"));
+        assertArrayEquals(everydayBytes, Files.readAllBytes(everyday));
+        assertArrayEquals(removedBytes, Files.readAllBytes(oldRemoved));
+        assertArrayEquals(flashcardsBytes, Files.readAllBytes(flashcards));
+        assertFalse(Files.exists(folder.resolve("lists")));
+        assertFalse(Files.exists(sentences));
     }
 
     @Test

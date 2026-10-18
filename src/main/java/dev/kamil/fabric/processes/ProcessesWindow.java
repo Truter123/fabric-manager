@@ -44,8 +44,9 @@ public final class ProcessesWindow {
 
     private final Stage window = new Stage();
     private final BiConsumer<String, Path> runInTab;
-    private final Docker docker = new Docker();
-    private final DevProcesses devProcesses = new DevProcesses();
+    private final Docker docker;
+    private final DevProcesses devProcesses;
+    private final Signaler signaler;
     private final Path home = Path.of(System.getProperty("user.home"));
 
     private final TableView<DockerContainer> containerTable = new TableView<>();
@@ -53,13 +54,15 @@ public final class ProcessesWindow {
     private final CheckBox hideIde = new CheckBox("Hide IDE and MCP");
     private final TextField filter = new TextField();
     private final Label status = new Label();
-    private final SystemStats systemStats = SystemStats.system();
+    private final Label hidden = new Label();
+    private final SystemStats systemStats;
     private final FlowPane statsBar = new FlowPane(18, 2);
 
     private List<DockerContainer> allContainers = List.of();
     private List<DevProcess> allProcesses = List.of();
     private String dockerError;
     private String actionError;
+    private String busy;
     private volatile boolean running = true;
     private volatile boolean active = true;
     private final Object wakeLock = new Object();
@@ -68,6 +71,22 @@ public final class ProcessesWindow {
 
     /** Opens the window, or brings the existing one to front. runInTab(command, dir): command null = plain shell. */
     public static void open(Window owner, BiConsumer<String, Path> runInTab) {
+        open(owner, runInTab, new Docker(), new DevProcesses(), SystemStats.system(), ProcessesWindow::signal);
+    }
+
+    /** Sends stop (SIGTERM) or kill (SIGKILL) to a pid; returns an error message, or null on success. */
+    interface Signaler {
+        String send(long pid, boolean force);
+    }
+
+    /** The open window, or null; for tests. */
+    static Stage openStage() {
+        return instance == null ? null : instance.window;
+    }
+
+    /** Seam for tests: every external source and the process signalling are injected. */
+    static void open(Window owner, BiConsumer<String, Path> runInTab, Docker docker, DevProcesses devProcesses,
+            SystemStats systemStats, Signaler signaler) {
         if (instance != null) {
             instance.window.show();
             instance.window.setIconified(false);
@@ -75,7 +94,7 @@ public final class ProcessesWindow {
             instance.window.requestFocus();
             return;
         }
-        var created = new ProcessesWindow(owner, runInTab);
+        var created = new ProcessesWindow(owner, runInTab, docker, devProcesses, systemStats, signaler);
         instance = created;
         created.window.setOnHidden(e -> {
             created.running = false;
@@ -88,8 +107,13 @@ public final class ProcessesWindow {
         created.startRefreshing();
     }
 
-    private ProcessesWindow(Window owner, BiConsumer<String, Path> runInTab) {
+    private ProcessesWindow(Window owner, BiConsumer<String, Path> runInTab, Docker docker,
+            DevProcesses devProcesses, SystemStats systemStats, Signaler signaler) {
         this.runInTab = runInTab;
+        this.docker = docker;
+        this.devProcesses = devProcesses;
+        this.systemStats = systemStats;
+        this.signaler = signaler;
         window.initOwner(owner);
         window.setTitle("Processes");
         // Mirrors of the window state for the refresh thread, maintained on the FX thread.
@@ -103,7 +127,10 @@ public final class ProcessesWindow {
         HBox.setHgrow(filter, Priority.ALWAYS);
         var refresh = new Button("Refresh");
         refresh.setOnAction(e -> refreshAsync());
-        var top = new HBox(8, filter, hideIde, refresh);
+        hidden.getStyleClass().add("proc-stats-item");
+        hidden.visibleProperty().bind(hidden.textProperty().isNotEmpty());
+        hidden.managedProperty().bind(hidden.visibleProperty());
+        var top = new HBox(8, filter, hideIde, hidden, refresh);
         top.setAlignment(Pos.CENTER_LEFT);
         top.setPadding(new Insets(8));
 
@@ -111,15 +138,15 @@ public final class ProcessesWindow {
         buildProcessTable();
 
         var dockerButtons = new HBox(6,
-                button("Start", () -> containerAction("start")),
-                button("Stop", () -> containerAction("stop")),
-                button("Restart", () -> containerAction("restart")),
-                button("Logs", this::logs),
-                button("Remove", this::removeContainer));
+                button("Start", () -> containerAction("start"), containerTable),
+                button("Stop", () -> containerAction("stop"), containerTable),
+                button("Restart", () -> containerAction("restart"), containerTable),
+                button("Logs", this::logs, containerTable),
+                button("Remove", this::removeContainer, containerTable));
         var processButtons = new HBox(6,
-                button("Stop", () -> stopProcess(false)),
-                button("Kill", () -> stopProcess(true)),
-                button("Open folder in shell", this::openFolder));
+                button("Stop", () -> stopProcess(false), processTable),
+                button("Kill", () -> stopProcess(true), processTable),
+                button("Open folder in shell", this::openFolder, processTable));
         dockerButtons.setPadding(new Insets(6, 0, 0, 0));
         processButtons.setPadding(new Insets(6, 0, 0, 0));
 
@@ -136,12 +163,13 @@ public final class ProcessesWindow {
         status.getStyleClass().add("history-meta");
         var statusBar = new HBox(status);
         statusBar.setPadding(new Insets(6, 8, 6, 8));
+        var footer = new VBox(statusBar, Dialogs.keyHint("Ctrl+F filter   F5 refresh   Esc close"));
 
         var root = new BorderPane(split);
         statsBar.getStyleClass().add("proc-stats");
         statsBar.setPadding(new Insets(8, 8, 0, 8));
         root.setTop(new VBox(statsBar, top));
-        root.setBottom(statusBar);
+        root.setBottom(footer);
         var scene = new Scene(root, 1000, 600);
         scene.getStylesheets().add(ProcessesWindow.class.getResource("/app.css").toExternalForm());
         scene.getStylesheets().add(ProcessesWindow.class.getResource("/processes.css").toExternalForm());
@@ -152,6 +180,7 @@ public final class ProcessesWindow {
                 });
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F5), this::refreshAsync);
         window.setScene(scene);
+        Dialogs.closeOnEscape(scene, window);
     }
 
     private static TitledPane titled(String title, VBox content) {
@@ -160,9 +189,11 @@ public final class ProcessesWindow {
         return pane;
     }
 
-    private static Button button(String text, Runnable action) {
+    /** A button that acts on the selected row of {@code table}: disabled while nothing is selected. */
+    private static Button button(String text, Runnable action, TableView<?> table) {
         var b = new Button(text);
         b.setOnAction(e -> action.run());
+        b.disableProperty().bind(table.getSelectionModel().selectedItemProperty().isNull());
         return b;
     }
 
@@ -310,10 +341,12 @@ public final class ProcessesWindow {
                 .filter(c -> needle.isEmpty() || c.name().toLowerCase(Locale.ROOT).contains(needle)
                         || c.image().toLowerCase(Locale.ROOT).contains(needle))
                 .toList();
-        var processes = allProcesses.stream()
+        var matching = allProcesses.stream()
                 .filter(p -> needle.isEmpty() || p.name().toLowerCase(Locale.ROOT).contains(needle))
-                .filter(p -> !hide || !isIdeOrMcp(p))
                 .toList();
+        var processes = matching.stream().filter(p -> !hide || !isIdeOrMcp(p)).toList();
+        int hiddenCount = matching.size() - processes.size();
+        hidden.setText(hiddenCount == 0 ? "" : hiddenCount + " hidden");
 
         var selectedContainer = containerTable.getSelectionModel().getSelectedItem();
         var selectedProcess = processTable.getSelectionModel().getSelectedItem();
@@ -328,7 +361,8 @@ public final class ProcessesWindow {
                     .ifPresent(processTable.getSelectionModel()::select);
         }
         var error = actionError != null ? actionError : dockerError;
-        status.setText(error != null ? error : containers.size() + " containers, " + processes.size() + " processes");
+        status.setText(busy != null ? busy
+                : error != null ? error : containers.size() + " containers, " + processes.size() + " processes");
     }
 
     static boolean isIdeOrMcp(DevProcess p) {
@@ -341,13 +375,28 @@ public final class ProcessesWindow {
         if (c == null) {
             return;
         }
-        runDocker(verb, c.id());
+        runDocker(verb, c);
     }
 
-    private void runDocker(String verb, String id) {
+    private static String busyText(String verb, String name) {
+        return switch (verb) {
+            case "start" -> "Starting ";
+            case "stop" -> "Stopping ";
+            case "restart" -> "Restarting ";
+            default -> "Removing ";
+        } + name + "\u2026";
+    }
+
+    private void runDocker(String verb, DockerContainer c) {
+        var id = c.id();
+        busy = busyText(verb, c.name());
+        status.setText(busy);
         var thread = new Thread(() -> {
             var error = docker.action(verb, id);
-            Platform.runLater(() -> actionError = error);
+            Platform.runLater(() -> {
+                busy = null;
+                actionError = error;
+            });
             load();
         }, "docker-" + verb);
         thread.setDaemon(true);
@@ -361,7 +410,7 @@ public final class ProcessesWindow {
         }
         if (Dialogs.confirm(window, "Remove container " + c.name() + "?",
                 "The container " + c.name() + " will be deleted.", "Remove")) {
-            runDocker("rm", c.id());
+            runDocker("rm", c);
         }
     }
 
@@ -381,12 +430,19 @@ public final class ProcessesWindow {
         if (!Dialogs.confirm(window, verb + " process " + p.pid() + "?", p.name(), verb)) {
             return;
         }
-        ProcessHandle.of(p.pid()).ifPresentOrElse(handle -> {
-            boolean ok = force ? handle.destroyForcibly() : handle.destroy();
-            actionError = ok ? null : verb + " failed for pid " + p.pid();
-        }, () -> actionError = "Process " + p.pid() + " is gone");
+        actionError = signaler.send(p.pid(), force);
         refreshAsync();
         applyFilter();
+    }
+
+    private static String signal(long pid, boolean force) {
+        var verb = force ? "Kill" : "Stop";
+        var handle = ProcessHandle.of(pid);
+        if (handle.isEmpty()) {
+            return "Process " + pid + " is gone";
+        }
+        boolean ok = force ? handle.get().destroyForcibly() : handle.get().destroy();
+        return ok ? null : verb + " failed for pid " + pid;
     }
 
     private void openFolder() {

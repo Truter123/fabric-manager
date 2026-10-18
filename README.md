@@ -14,7 +14,8 @@ Tabbed JavaFX terminal for Claude Code, Codex, Gemini, Aider or any CLI. Java 25
 | Ctrl+Shift+N | project picker (folder + tool) |
 | Ctrl+Shift+T | new shell tab in the current directory |
 | Ctrl+Shift+W | close tab |
-| Ctrl+Shift+D | split: shell beside the session (again = switch orientation) |
+| Ctrl+Shift+R | rename session |
+| Ctrl+Shift+D | split terminal (in a terminal): shell beside the session (again = switch orientation); duplicate session (elsewhere) |
 | Ctrl+Shift+[ / Ctrl+Shift+] | move focus between the two panes of a split tab (clicking a pane works too) |
 | Ctrl+Shift+H | git history of the current tab's repository |
 | Ctrl+Shift+, | Settings: General, Terminal, Notifications, Accounts, Body double, Claude Code (changes save at once; Esc clears the search, Esc again closes; the Claude Code group opens the config browser for CLAUDE.md, settings, skills, agents…) |
@@ -23,12 +24,19 @@ Tabbed JavaFX terminal for Claude Code, Codex, Gemini, Aider or any CLI. Java 25
 | Ctrl+Shift+K | tasks: notes with an optional due date (Overdue / Today / Later / No date) |
 | Ctrl+Shift+P | processes: all Docker containers and your Java / Node (Angular) processes; start, stop, logs; a stats bar on top shows CPU / GPU / NVMe temperature, CPU load, RAM and battery (read from /sys and /proc, only while the window is open) |
 | Ctrl+Shift+V | body double: show / hide the small always-on-top video window |
+| Ctrl+Shift+Q | your quotes |
+| Ctrl+Shift+E | English sentences |
 | Ctrl+Shift+G | SSH: pick a host and open it in a new tab; add, edit, delete or hide hosts |
 | Ctrl+Shift+I | Water: today's water, Drank / Skip, reminder settings |
+| Ctrl+Shift+B | new session in a git worktree |
+| Ctrl+Shift+C | git changes of this session |
+| Ctrl+Shift+M | fleet servers and app status |
+| Ctrl+Shift+F | search Claude transcripts |
 | (sidebar) | the session sidebar is always shown (its footer shows token usage and cost: today and the current 5-hour block; each Claude session row shows its context fill; the quota is fetched once at start and then refreshed only while the usage panel is expanded, the collapsed line shows the last numbers with their age) |
 | Ctrl+Shift+A | agents panel: show / hide the right panel listing open Claude tabs (state, project, account, context, unread), waiting first; click a row to jump to the tab. A status line under the terminal shows state, context %, git branch and account of the active tab |
 | Ctrl+Shift+O | overview: one card per session with its last output; Enter/click jumps, 1–9 picks, Esc closes |
 | Ctrl+Tab / Ctrl+Shift+Tab | next / previous tab |
+| F1 | keys: the cheat sheet of all these keys (F1 or Esc closes it) |
 | Shift+Tab | passed to the tool (Claude mode switch) |
 | Shift+Enter | new line in the prompt (sends ESC CR) |
 

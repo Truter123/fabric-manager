@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /** Docker driven through the CLI. Methods block; call them off the UI thread. */
-public final class Docker {
+public class Docker {
 
     /** Containers plus an error message (null when listing worked). */
     public record Listing(List<DockerContainer> containers, String error) {

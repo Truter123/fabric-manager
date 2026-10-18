@@ -1,12 +1,15 @@
 package dev.kamil.fabric.tasks;
 
 import dev.kamil.fabric.Dialogs;
+import dev.kamil.fabric.UndoBar;
 import dev.kamil.fabric.session.Database;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -28,6 +31,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
@@ -54,7 +58,9 @@ public final class TasksWindow {
     private final ListView<Row> list = new ListView<>(rows);
     private final TextField input = new TextField();
     private final DatePicker date = new DatePicker();
+    private final UndoBar undoBar = new UndoBar();
     private boolean showDone;
+    private final AtomicInteger generation = new AtomicInteger();
 
     /** Opens the window, or brings the existing one to front. */
     public static void open(Window owner, Database db) {
@@ -72,11 +78,18 @@ public final class TasksWindow {
         created.input.requestFocus();
     }
 
+    /** The open window, or null; for tests. */
+    static Stage openStage() {
+        return instance == null ? null : instance.window;
+    }
+
     private TasksWindow(Window owner, Database db) {
         store = new TaskStore(db);
         window.initOwner(owner);
 
         input.setPromptText("New task, press Enter");
+        input.getStyleClass().add("task-input");
+        input.setMinWidth(320);
         input.setOnAction(e -> add());
         HBox.setHgrow(input, Priority.ALWAYS);
         date.setPromptText("No date");
@@ -89,6 +102,7 @@ public final class TasksWindow {
         noDate.setOnAction(e -> date.setValue(null));
         var addButton = new Button("Add");
         addButton.setOnAction(e -> add());
+        addButton.getStyleClass().add("primary");
         var bar = new HBox(8, input, date, today, tomorrow, noDate, addButton);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(8));
@@ -96,16 +110,28 @@ public final class TasksWindow {
         list.setCellFactory(v -> new TaskCell());
         list.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.DELETE && list.getSelectionModel().getSelectedItem() instanceof Item item) {
-                Dialogs.attempt(window, "Cannot delete the task", () -> store.delete(item.task().id()));
-                refresh();
+                delete(item.task());
             }
         });
 
         var root = new BorderPane(list);
         root.setTop(bar);
-        var scene = new Scene(root, 700, 600);
+        root.setBottom(new VBox(undoBar, Dialogs.keyHint("Enter add   Delete delete selected   Esc close")));
+        var scene = new Scene(root, 880, 600);
         scene.getStylesheets().add(TasksWindow.class.getResource("/app.css").toExternalForm());
         window.setScene(scene);
+        Dialogs.closeOnEscape(scene, window);
+        refresh();
+    }
+
+    /** Deletes at once; the undo bar puts the task back. */
+    private void delete(Task task) {
+        if (Dialogs.attempt(window, "Cannot delete the task", () -> store.delete(task.id()))) {
+            undoBar.offer(UndoBar.deleted(task.text()), () -> {
+                Dialogs.attempt(window, "Cannot restore the task", () -> store.restore(task));
+                refresh();
+            });
+        }
         refresh();
     }
 
@@ -123,12 +149,32 @@ public final class TasksWindow {
     }
 
     private void refresh() {
-        var today = LocalDate.now();
+        var gen = generation.incrementAndGet();
+        var includeDone = showDone;
+        Thread.ofPlatform().daemon().name("tasks-load").start(() -> {
+            try {
+                var today = LocalDate.now();
+                var open = store.open();
+                var recentDone = store.doneRecent(DONE_LIMIT);
+                var count = store.dueCount(today);
+                Platform.runLater(() -> {
+                    if (gen == generation.get()) {
+                        apply(today, open, recentDone, includeDone, count);
+                    }
+                });
+            } catch (RuntimeException e) {
+                Platform.runLater(() -> Dialogs.error(window, "Cannot load the tasks", String.valueOf(e.getMessage())));
+            }
+        });
+    }
+
+    private void apply(LocalDate today, List<Task> open, List<Task> recentDone, boolean includeDone,
+            DueCount count) {
         var overdue = new ArrayList<Row>();
         var dueToday = new ArrayList<Row>();
         var later = new ArrayList<Row>();
         var undated = new ArrayList<Row>();
-        for (var task : store.open()) {
+        for (var task : open) {
             var item = new Item(task);
             if (task.due() == null) {
                 undated.add(item);
@@ -145,13 +191,12 @@ public final class TasksWindow {
         section(all, new Header("Today", false, false), dueToday);
         section(all, new Header("Later", false, false), later);
         section(all, new Header("No date", false, false), undated);
-        var done = showDone ? store.doneRecent(DONE_LIMIT) : List.<Task>of();
-        var doneCount = showDone ? done.size() : store.doneRecent(DONE_LIMIT).size();
-        all.add(new Header((showDone ? "▾ " : "▸ ") + "Done (" + doneCount + ")", false, true));
-        done.forEach(t -> all.add(new Item(t)));
+        all.add(new Header((includeDone ? "▾ " : "▸ ") + "Done (" + recentDone.size() + ")", false, true));
+        if (includeDone) {
+            recentDone.forEach(t -> all.add(new Item(t)));
+        }
         rows.setAll(all);
 
-        var count = store.dueCount(today);
         var title = new StringBuilder("Tasks");
         if (count.overdue() > 0 || count.today() > 0) {
             title.append(" — ").append(count.overdue()).append(" overdue, ").append(count.today()).append(" today");
@@ -221,8 +266,7 @@ public final class TasksWindow {
             var delete = new MenuItem("Delete");
             delete.setOnAction(e -> {
                 if (task != null) {
-                    Dialogs.attempt(window, "Cannot delete the task", () -> store.delete(task.id()));
-                    refresh();
+                    delete(task);
                 }
             });
             var menu = new ContextMenu(change, delete);
@@ -272,7 +316,6 @@ public final class TasksWindow {
             if (task.done()) {
                 box.getStyleClass().add("task-done");
             }
-            box.setPrefWidth(getListView().getWidth() - 24);
             box.prefWidthProperty().bind(getListView().widthProperty().subtract(24));
             setGraphic(box);
         }

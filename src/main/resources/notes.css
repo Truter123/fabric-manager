@@ -45,12 +45,6 @@
     -fx-font-family: monospace;
 }
 
-.note-undo-bar {
-    -fx-background-color: -fm-raised;
-    -fx-border-color: -fm-border;
-    -fx-padding: 6 10 6 10;
-}
-
 .note-fix {
     -fx-background-color: -fm-raised;
     -fx-border-color: -fm-accent;
@@ -59,4 +53,8 @@
 
 .note-status {
     -fx-text-fill: -fm-muted;
+}
+
+.note-status-error {
+    -fx-text-fill: -fm-red;
 }

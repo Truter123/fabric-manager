@@ -19,7 +19,7 @@ public final class Database {
 
     /** @param file the H2 base path, without the .mv.db suffix */
     Database(Path file) {
-        this.url = "jdbc:h2:file:" + file.toAbsolutePath() + ";AUTO_SERVER=TRUE";
+        this.url = "jdbc:h2:file:" + file.toAbsolutePath() + ";AUTO_SERVER=TRUE;DB_CLOSE_DELAY=-1";
     }
 
     /** A database at the given H2 base path. */

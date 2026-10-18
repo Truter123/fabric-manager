@@ -17,21 +17,21 @@ class NotifierTest {
 
     @Test
     void notifiesWhenWindowNotFocused() {
-        assertTrue(notifier.onState("s", "app", Activity.DONE, false, true));
+        assertTrue(withToast().onState("s", "app", Activity.DONE, false, true));
         assertEquals(List.of(List.of("app", "Claude finished")), toasts);
         assertEquals(List.of(List.of("canberra-gtk-play", "-i", "complete")), commands);
     }
 
     @Test
     void notifiesWhenTabNotSelected() {
-        assertTrue(notifier.onState("s", "app", Activity.WAITING, true, false));
+        assertTrue(withToast().onState("s", "app", Activity.WAITING, true, false));
         assertEquals("Claude is waiting for you", toasts.get(0).get(1));
         assertEquals(List.of("canberra-gtk-play", "-i", "message"), commands.get(0));
     }
 
     @Test
     void errorUsesErrorText() {
-        assertTrue(notifier.onState("s", "app", Activity.ERROR, false, false));
+        assertTrue(withToast().onState("s", "app", Activity.ERROR, false, false));
         assertEquals("error", toasts.get(0).get(1));
     }
 
@@ -57,9 +57,24 @@ class NotifierTest {
         return new Notifier(commands::add, Runnable::run, (t, m) -> toasts.add(List.of(t, m)), settings);
     }
 
+    private Notifier withToast() {
+        var settings = dev.kamil.fabric.settings.AppSettings.inMemory();
+        settings.setBoolean(Notifier.DESKTOP, true);
+        return with(settings);
+    }
+
+    @Test
+    void defaultsShowNoToastButStillPlayTheSound() {
+        assertTrue(with(dev.kamil.fabric.settings.AppSettings.inMemory())
+                .onState("s", "app", Activity.DONE, false, false));
+        assertTrue(toasts.isEmpty());
+        assertEquals(List.of(List.of("canberra-gtk-play", "-i", "complete")), commands);
+    }
+
     @Test
     void soundOffShowsOnlyTheToast() {
         var settings = dev.kamil.fabric.settings.AppSettings.inMemory();
+        settings.setBoolean(Notifier.DESKTOP, true);
         settings.setBoolean("notify.sound", false);
         assertTrue(with(settings).onState("s", "app", Activity.DONE, false, false));
         assertEquals(1, toasts.size());

@@ -27,6 +27,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.media.Media;
 import javafx.scene.media.MediaPlayer;
 import javafx.scene.media.MediaView;
@@ -48,10 +49,12 @@ public final class BodyDoubleWindow {
     private static final double[] REMEMBERED = {Double.NaN, Double.NaN, 400, 260};
 
     private static BodyDoubleWindow instance;
+    /** Creates the downloader of a new window; tests replace it with a stubbed one. */
+    static java.util.function.Supplier<VideoDownloader> downloaders = VideoDownloader::new;
 
     private final Stage window = new Stage();
     private final BodyDoubleStore store;
-    private final VideoDownloader downloader = new VideoDownloader();
+    private final VideoDownloader downloader = downloaders.get();
     private final TextField urlField = new TextField();
     private final ComboBox<Video> recent = new ComboBox<>();
     private final MediaView view = new MediaView();
@@ -65,8 +68,15 @@ public final class BodyDoubleWindow {
     private final AtomicInteger generation = new AtomicInteger();
     private MediaPlayer player;
     private String currentUrl;
+    /** True once the current link's cached file was dropped and fetched again after a playback failure. */
+    private boolean redownloaded;
     private long lastPositionMs;
     private boolean updatingRecent;
+
+    /** The open window, or null; for tests. */
+    static Stage openStage() {
+        return instance == null ? null : instance.window;
+    }
 
     /** Shows the window, or hides it when it is already open. */
     public static void toggle(Window owner, Database db) {
@@ -163,11 +173,14 @@ public final class BodyDoubleWindow {
 
         var root = new BorderPane(center);
         root.setTop(top);
-        root.setBottom(controls);
+        root.setBottom(new VBox(controls,
+                Dialogs.keyHint("Space play/pause   ← back 5 s   → forward 5 s   Esc close")));
         var scene = new Scene(root, REMEMBERED[2], REMEMBERED[3]);
         scene.getStylesheets().add(BodyDoubleWindow.class.getResource("/app.css").toExternalForm());
         scene.addEventFilter(KeyEvent.KEY_PRESSED, this::onKey);
         window.setScene(scene);
+        Dialogs.closeOnEscape(scene, window);
+        Dialogs.escapeKeepsText(urlField);
         if (!Double.isNaN(REMEMBERED[0])) {
             window.setX(REMEMBERED[0]);
             window.setY(REMEMBERED[1]);
@@ -198,6 +211,7 @@ public final class BodyDoubleWindow {
         savePosition();
         disposePlayer();
         currentUrl = pageUrl;
+        redownloaded = false;
         Video video = null;
         try {
             video = store.upsert(pageUrl, null);
@@ -271,8 +285,25 @@ public final class BodyDoubleWindow {
             created.setOnError(() -> onPlayerError(created));
             saver.play();
         } catch (RuntimeException e) {
-            show("Cannot play: " + e.getMessage());
+            playbackFailed("Cannot play: " + e.getMessage());
         }
+    }
+
+    /**
+     * A cached file that cannot play is dropped and fetched once more; if the fresh file fails too,
+     * the machine cannot play at all, so the error is shown and the file kept. The failed player is dropped either
+     * way: JavaFX reports some unplayable files only after the player is on the view.
+     */
+    private void playbackFailed(String message) {
+        if (redownloaded) {
+            disposePlayer();
+            show(message);
+            return;
+        }
+        redownloaded = true;
+        disposePlayer();
+        downloader.deleteCached(currentUrl);
+        downloadAndPlay(false);
     }
 
     private void onPlayerError(MediaPlayer failed) {
@@ -280,9 +311,7 @@ public final class BodyDoubleWindow {
             return;
         }
         var message = failed.getError() == null ? "unknown error" : failed.getError().getMessage();
-        // A cached file that cannot play is dropped, so the next load downloads it again.
-        downloader.deleteCached(currentUrl);
-        show("Playback failed: " + message);
+        playbackFailed("Playback failed: " + message);
     }
 
     private void togglePlay() {

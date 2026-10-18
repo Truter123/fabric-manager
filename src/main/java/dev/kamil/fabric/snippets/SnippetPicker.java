@@ -1,6 +1,7 @@
 package dev.kamil.fabric.snippets;
 
 import dev.kamil.fabric.Dialogs;
+import dev.kamil.fabric.UndoBar;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
@@ -41,8 +42,11 @@ public final class SnippetPicker {
     private final VBox editorPane = new VBox(8);
     private final TextField nameField = new TextField();
     private final TextArea textArea = new TextArea();
+    private final Label editorTitle = new Label();
+    private final Label editorError = new Label();
     private final CheckBox onlyProject = new CheckBox("only this project");
     private final StackPane root = new StackPane();
+    private final UndoBar undoBar = new UndoBar();
     private Snippet editing;
 
     /**
@@ -65,13 +69,20 @@ public final class SnippetPicker {
         VBox.setVgrow(list, Priority.ALWAYS);
         var hint = new Label("Enter send   Shift+Enter without newline   Ctrl+N new   Ctrl+E edit   Ctrl+Del delete");
         hint.getStyleClass().add("snippet-hint");
-        pickerPane.getChildren().addAll(filter, list, hint);
+        pickerPane.getChildren().addAll(filter, list, undoBar, hint);
 
         nameField.setPromptText("Name");
         textArea.setPromptText("Text");
         textArea.setPrefRowCount(6);
         VBox.setVgrow(textArea, Priority.ALWAYS);
+        nameField.setOnAction(e -> saveEditor());
+        nameField.textProperty().addListener((o, was, now) -> showEditorError(null));
+        textArea.textProperty().addListener((o, was, now) -> showEditorError(null));
+        editorTitle.getStyleClass().add("snippet-name");
+        editorError.getStyleClass().add("inline-error");
+        showEditorError(null);
         var save = new Button("Save");
+        save.getStyleClass().add("primary");
         save.setOnAction(e -> saveEditor());
         var cancel = new Button("Cancel");
         cancel.setOnAction(e -> closeEditor());
@@ -80,7 +91,7 @@ public final class SnippetPicker {
         buttons.setAlignment(Pos.CENTER_RIGHT);
         var editorHint = new Label("Ctrl+Enter saves   Esc cancels");
         editorHint.getStyleClass().add("snippet-hint");
-        editorPane.getChildren().addAll(nameField, textArea, onlyProject, buttons, editorHint);
+        editorPane.getChildren().addAll(editorTitle, nameField, textArea, onlyProject, editorError, buttons, editorHint);
         editorPane.setVisible(false);
 
         root.getChildren().addAll(pickerPane, editorPane);
@@ -103,6 +114,7 @@ public final class SnippetPicker {
     /** Shows the popup centred on the owner window. */
     public void show() {
         closeEditor();
+        undoBar.dismiss();
         filter.clear();
         refresh();
         var owner = stage.getOwner();
@@ -177,7 +189,12 @@ public final class SnippetPicker {
             case DELETE -> {
                 var selected = list.getSelectionModel().getSelectedItem();
                 if (event.isControlDown() && selected != null) {
-                    Dialogs.attempt(stage, "Cannot delete the snippet", () -> store.delete(selected.id()));
+                    if (Dialogs.attempt(stage, "Cannot delete the snippet", () -> store.delete(selected.id()))) {
+                        undoBar.offer(UndoBar.deleted(selected.name()), () -> {
+                            Dialogs.attempt(stage, "Cannot restore the snippet", () -> store.restore(selected));
+                            refresh();
+                        });
+                    }
                     refresh();
                     event.consume();
                 }
@@ -207,8 +224,10 @@ public final class SnippetPicker {
 
     private void openEditor(Snippet snippet) {
         editing = snippet;
+        editorTitle.setText(snippet == null ? "New snippet" : "Edit snippet");
         nameField.setText(snippet == null ? "" : snippet.name());
         textArea.setText(snippet == null ? "" : snippet.text());
+        showEditorError(null);
         onlyProject.setSelected(snippet != null && snippet.projectPath() != null);
         onlyProject.setDisable(currentProjectPath.get() == null && (snippet == null || snippet.projectPath() == null));
         pickerPane.setVisible(false);
@@ -220,6 +239,7 @@ public final class SnippetPicker {
         var name = nameField.getText().strip();
         var text = textArea.getText();
         if (name.isEmpty() || text == null || text.isBlank()) {
+            showEditorError("Name and text are required");
             return;
         }
         String project = null;
@@ -238,6 +258,13 @@ public final class SnippetPicker {
         }
         closeEditor();
         refresh();
+    }
+
+    /** Shows {@code message} under the fields, or hides the error line when it is null. */
+    private void showEditorError(String message) {
+        editorError.setText(message == null ? "" : message);
+        editorError.setVisible(message != null);
+        editorError.setManaged(message != null);
     }
 
     private void closeEditor() {

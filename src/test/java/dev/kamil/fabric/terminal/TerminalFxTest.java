@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.techsenger.jeditermfx.core.TtyConnector;
 import com.techsenger.jeditermfx.ui.JediTermFxWidget;
 import com.techsenger.jeditermfx.ui.settings.DefaultSettingsProvider;
+import dev.kamil.fabric.FxHarness;
 import dev.kamil.fabric.session.Account;
 import dev.kamil.fabric.session.Tool;
 import java.nio.file.Files;
@@ -34,7 +35,7 @@ class TerminalFxTest {
 
     @BeforeAll
     static void startFx() {
-        Assumptions.assumeTrue(System.getenv("DISPLAY") != null || System.getenv("WAYLAND_DISPLAY") != null,
+        Assumptions.assumeTrue(FxHarness.displayAvailable(),
                 "no display");
         try {
             Platform.startup(() -> { });

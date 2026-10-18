@@ -63,7 +63,7 @@ public final class BranchPopup {
         create.setMaxWidth(Double.MAX_VALUE);
         create.setOnAction(e -> newBranch());
 
-        var root = new VBox(6, filter, list, create);
+        var root = new VBox(6, filter, list, create, Dialogs.keyHint("↑↓ choose   Enter switch   Esc close"));
         root.getStyleClass().add("branch-popup");
         root.setPadding(new Insets(8));
         root.getStylesheets().add(BranchPopup.class.getResource("/app.css").toExternalForm());

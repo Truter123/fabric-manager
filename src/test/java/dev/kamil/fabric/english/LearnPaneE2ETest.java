@@ -46,10 +46,9 @@ class LearnPaneE2ETest {
 
     @BeforeEach
     void prepare() throws Exception {
-        progress = dir.resolve("flashcards.csv");
-        ProgressStore.file = progress;
-        sentencesFile = dir.resolve("everyday.md");
-        EnglishWindow.file = sentencesFile;
+        progress = dir.resolve("my-list.progress.csv");
+        sentencesFile = dir.resolve("my-list.md");
+        EnglishWindow.dir = dir;
         RecordingHistory.standardRoot = dir.resolve("recordings");
         history = new RecordingHistory(dir.resolve("recordings"));
         Recorder.fake = true;
@@ -115,7 +114,19 @@ class LearnPaneE2ETest {
     private String counter() throws Exception {
         return fx(() -> {
             for (Node n : stage().getScene().getRoot().lookupAll(".history-meta")) {
-                if (n instanceof Label l && (l.getText().startsWith("new") || l.getText().isEmpty())) {
+                if (n instanceof Label l && l.getText().startsWith("Learn")) {
+                    return l.getText().replaceFirst("^Learn( · )?", "");
+                }
+            }
+            return null;
+        });
+    }
+
+    /** The whole header title, e.g. {@code Learn · card 1 of 2}. */
+    private String title() throws Exception {
+        return fx(() -> {
+            for (Node n : stage().getScene().getRoot().lookupAll(".history-meta")) {
+                if (n instanceof Label l && l.getText().startsWith("Learn")) {
                     return l.getText();
                 }
             }
@@ -123,8 +134,17 @@ class LearnPaneE2ETest {
         });
     }
 
+    private boolean primary(String button) throws Exception {
+        return fx(() -> button(stage().getScene().getRoot(), button).getStyleClass().contains("primary"));
+    }
+
     private boolean disabled(String button) throws Exception {
         return fx(() -> button(stage().getScene().getRoot(), button).isDisabled());
+    }
+
+    /** How many buttons under the root carry exactly this text. */
+    private long countOf(String button) throws Exception {
+        return buttons().stream().filter(button::equals).count();
     }
 
     private List<String> buttons() throws Exception {
@@ -136,17 +156,92 @@ class LearnPaneE2ETest {
     @Test
     void cardShowsEverythingAtOnce() throws Exception {
         open(A, B);
-        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("card 1 of 2", counter());
         assertEquals(List.of("I am late", "Spozniam sie", "ai am leit", "late show"), texts());
-        assertTrue(buttons().containsAll(List.of("Me (P)", "First (F)", "I know it (Space)", "Skip (N)")));
+        assertTrue(buttons().containsAll(List.of("Me (P)", "First (F)", "I know it (Space)", "Next (→)")));
         assertTrue(disabled("I know it (Space)"));
+    }
+
+    @Test
+    void cardHasEachControlOnceAndKnowItIsThePrimaryAction() throws Exception {
+        open(A, B);
+        for (var text : List.of("I know it (Space)", "Listen (L)", "Back (←)", "Next (→)", "Remove (Del)", "Home (Esc)")) {
+            assertEquals(1, countOf(text), text + " in " + buttons());
+        }
+        assertTrue(primary("I know it (Space)"));
+        assertFalse(primary("Next (→)"));
+    }
+
+    @Test
+    void titleReadsLearnCardNOfN() throws Exception {
+        open(A, B);
+        assertEquals("Learn · card 1 of 2", title());
+        key(KeyCode.RIGHT);
+        assertEquals("Learn · card 2 of 2", title());
+    }
+
+    @Test
+    void rightArrowGoesOnWithoutWriting() throws Exception {
+        open(A, B);
+        key(KeyCode.RIGHT);
+        assertEquals("card 2 of 2", counter());
+        assertEquals("Good morning", texts().get(0));
+        assertFalse(Files.exists(progress));
+    }
+
+    @Test
+    void nextButtonGoesOnWithoutWriting() throws Exception {
+        open(A, B);
+        click("Next (→)");
+        assertEquals("card 2 of 2", counter());
+        assertEquals("Good morning", texts().get(0));
+        assertFalse(Files.exists(progress));
+    }
+
+    @Test
+    void enterActsLikeSpace() throws Exception {
+        open(A, B);
+        key(KeyCode.ENTER);
+        assertEquals("card 1 of 2", counter());
+        assertFalse(Files.exists(progress));
+        key(KeyCode.R);
+        key(KeyCode.R);
+        key(KeyCode.ENTER);
+        assertEquals(List.of(new CardProgress(A.english(), 1, LocalDate.now().plusDays(1))), CardProgress.load(progress));
+        assertEquals("card 2 of 2", counter());
+        assertEquals("Good morning", texts().get(0));
+    }
+
+    @Test
+    void endScreenDisablesNextAndRemoveAndKeepsBack() throws Exception {
+        open(A);
+        learnFirst();
+        assertEquals("Learn", title());
+        assertTrue(disabled("Next (→)"));
+        assertTrue(disabled("Remove (Del)"));
+        assertFalse(disabled("Back (←)"));
+        assertEquals(1, countOf("Home (Esc)"));
+    }
+
+    /** Wrapped text must not hold the pane at the window width, or a narrower window clips its left edge. */
+    @Test
+    void paneCanShrinkBelowTheWidthItWasLaidOutAt() throws Exception {
+        var longWatch = "verb first, then the object, and plural articles ".repeat(12);
+        open(new Sentence("2026-10-01", "I am late", "Spozniam sie", "ai am leit", longWatch));
+        var minWidth = fx(() -> {
+            var root = stage().getScene().getRoot();
+            root.applyCss();
+            root.layout();
+            return ((javafx.scene.layout.Region) root.getChildrenUnmodifiable().get(0)).minWidth(-1);
+        });
+        assertTrue(minWidth < 400, "pane min width " + minWidth);
     }
 
     @Test
     void spaceIsIgnoredBeforeARecording() throws Exception {
         open(A, B);
         key(KeyCode.SPACE);
-        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("card 1 of 2", counter());
         assertFalse(Files.exists(progress));
     }
 
@@ -162,7 +257,7 @@ class LearnPaneE2ETest {
         assertFalse(disabled("I know it (Space)"));
         key(KeyCode.SPACE);
         assertEquals(List.of(new CardProgress(A.english(), 1, LocalDate.now().plusDays(1))), CardProgress.load(progress));
-        assertEquals("new 2 of 2 · new", counter());
+        assertEquals("card 2 of 2", counter());
         assertEquals("Good morning", texts().get(0));
         assertTrue(disabled("I know it (Space)"));
     }
@@ -191,9 +286,9 @@ class LearnPaneE2ETest {
     void skipGoesOnWithoutWriting() throws Exception {
         open(A, B);
         key(KeyCode.N);
-        assertEquals("new 2 of 2 · new", counter());
+        assertEquals("card 2 of 2", counter());
         assertFalse(Files.exists(progress));
-        click("Skip (N)");
+        click("Next (→)");
         assertEquals("", counter());
         assertEquals(List.of("Learned 0. Review starts tomorrow."), texts());
         assertFalse(Files.exists(progress));
@@ -217,7 +312,7 @@ class LearnPaneE2ETest {
             assertTrue(buttons().contains("5 more (Space)"));
             assertTrue(buttons().contains("Home (Esc)"));
             key(KeyCode.SPACE);
-            assertEquals("new 1 of 1 · new", counter());
+            assertEquals("card 1 of 1", counter());
             assertEquals("En5", texts().get(0));
         } finally {
             dev.kamil.fabric.settings.AppSettings.shared().setInt(EnglishWindow.DAILY_SIZE_KEY, 10);
@@ -255,10 +350,10 @@ class LearnPaneE2ETest {
     }
 
     private void assertRemovedFirstCard() throws Exception {
-        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("card 1 of 2", counter());
         assertEquals("Good morning", texts().get(0));
         assertEquals(List.of(B, C), SentenceFile.load(sentencesFile));
-        assertEquals(List.of(A), SentenceFile.load(sentencesFile.resolveSibling("removed.md")));
+        assertEquals(List.of(A), SentenceFile.load(sentencesFile.resolveSibling("my-list.removed.md")));
         assertEquals("English", fx(() -> stage().getTitle()));
         assertTrue(fx(() -> stage().getScene().getRoot().lookupAll(".history-meta").stream()
                 .anyMatch(n -> n instanceof Label l && l.isVisible()
@@ -289,7 +384,7 @@ class LearnPaneE2ETest {
         key(KeyCode.DELETE);
         assertEquals(List.of("Nothing new to learn."), texts());
         assertEquals(List.of(), SentenceFile.load(sentencesFile));
-        assertEquals(List.of(A), SentenceFile.load(sentencesFile.resolveSibling("removed.md")));
+        assertEquals(List.of(A), SentenceFile.load(sentencesFile.resolveSibling("my-list.removed.md")));
     }
 
     private void learnFirst() throws Exception {
@@ -306,12 +401,12 @@ class LearnPaneE2ETest {
         assertEquals(List.of(new CardProgress(A.english(), 1, LocalDate.now().plusDays(1))), CardProgress.load(progress));
         assertFalse(disabled("Back (←)"));
         key(KeyCode.LEFT);
-        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("card 1 of 2", counter());
         assertEquals("I am late", texts().get(0));
         assertEquals(List.of(), CardProgress.load(progress));
         assertTrue(disabled("Back (←)"));
         key(KeyCode.LEFT);
-        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("card 1 of 2", counter());
     }
 
     @Test
@@ -329,7 +424,7 @@ class LearnPaneE2ETest {
         learnFirst();
         assertEquals(List.of("Learned 1. Review starts tomorrow."), texts());
         click("Back (←)");
-        assertEquals("new 1 of 1 · new", counter());
+        assertEquals("card 1 of 1", counter());
         assertEquals("I am late", texts().get(0));
         assertEquals(List.of(), CardProgress.load(progress));
         key(KeyCode.R);
@@ -353,7 +448,7 @@ class LearnPaneE2ETest {
     void homeButtonOnTheCardGoesHome() throws Exception {
         open(A, B);
         click("Home (Esc)");
-        assertTrue(buttons().stream().anyMatch(b -> b.contains("Learn")) || !buttons().contains("Skip (N)"));
-        assertFalse(buttons().contains("Skip (N)"));
+        assertTrue(buttons().stream().anyMatch(b -> b.contains("Learn")) || !buttons().contains("Next (→)"));
+        assertFalse(buttons().contains("Next (→)"));
     }
 }

@@ -42,4 +42,12 @@ class OverviewGridTest {
         var bare = new OverviewGrid.Card("a", "proj", "", null, false, false, null, List.of());
         assertEquals("proj", OverviewGrid.meta(bare));
     }
+
+    @Test
+    void onlyTheFirstNineCardsGetADigit() {
+        assertEquals("1", OverviewGrid.badgeText(0));
+        assertEquals("9", OverviewGrid.badgeText(8));
+        assertEquals("", OverviewGrid.badgeText(9));
+        assertEquals("", OverviewGrid.badgeText(-1));
+    }
 }

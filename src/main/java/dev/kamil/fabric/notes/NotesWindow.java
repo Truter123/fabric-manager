@@ -1,6 +1,7 @@
 package dev.kamil.fabric.notes;
 
 import dev.kamil.fabric.Dialogs;
+import dev.kamil.fabric.UndoBar;
 import dev.kamil.fabric.session.Database;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -28,6 +29,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -39,22 +41,23 @@ import javafx.stage.Window;
 
 /**
  * Non-modal notes window: search, filter chips and a note list on the left, an autosaving editor on the right.
- * Ctrl+N new note, Ctrl+Delete delete (undo bar), Ctrl+P pin.
+ * Ctrl+N new note, Ctrl+Delete in the list deletes (undo bar), Ctrl+P pin.
  */
 public final class NotesWindow {
 
     private static final javafx.util.Duration AUTOSAVE = javafx.util.Duration.seconds(1);
-    private static final javafx.util.Duration UNDO_TIME = javafx.util.Duration.seconds(8);
     private static final KeyCombination NEW = new KeyCodeCombination(KeyCode.N, KeyCombination.CONTROL_DOWN);
     private static final KeyCombination DELETE = new KeyCodeCombination(KeyCode.DELETE,
             KeyCombination.CONTROL_DOWN);
     private static final KeyCombination PIN = new KeyCodeCombination(KeyCode.P, KeyCombination.CONTROL_DOWN);
 
     private static NotesWindow instance;
+    /** The corrector command; tests replace it so no real claude CLI runs. */
+    static List<String> correctorCommand = EnglishCorrector.standard();
 
     private final Stage window = new Stage();
     private final NoteStore store;
-    private final EnglishCorrector corrector = new EnglishCorrector(EnglishCorrector.standard());
+    private final EnglishCorrector corrector = new EnglishCorrector(correctorCommand);
     private final javafx.collections.ObservableList<Note> notes = FXCollections.observableArrayList();
     private final ListView<Note> list = new ListView<>(notes);
     private final TextField search = new TextField();
@@ -66,17 +69,14 @@ public final class NotesWindow {
     private final Button pinButton = new Button("Pin");
     private final Button fixButton = new Button("Fix English");
     private final Label status = new Label();
-    private final HBox undoBar = new HBox(10);
-    private final Label undoLabel = new Label("Note deleted");
+    private final UndoBar undoBar = new UndoBar();
     private final VBox fixBox = new VBox(6);
     private final TextArea fixed = new TextArea();
     private final PauseTransition autosave = new PauseTransition(AUTOSAVE);
-    private final PauseTransition undoTimer = new PauseTransition(UNDO_TIME);
     private final VBox editor = new VBox(8);
 
     private Supplier<List<Note>> filter;
     private String filterId = "all";
-    private Note deleted;
     private long current = -1;
     private boolean loading;
     private boolean dirty;
@@ -98,6 +98,11 @@ public final class NotesWindow {
         });
         created.window.show();
         created.body.requestFocus();
+    }
+
+    /** The open window, or null; for tests. */
+    static Stage openStage() {
+        return instance == null ? null : instance.window;
     }
 
     private NotesWindow(Window owner, Database db) {
@@ -135,17 +140,11 @@ public final class NotesWindow {
         delete.setOnAction(e -> deleteCurrent());
         var newButton = new Button("New");
         newButton.setOnAction(e -> newNote());
+        newButton.getStyleClass().add("primary");
         var spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         var tools = new HBox(8, newButton, pinButton, project, fixButton, spacer, delete);
         tools.setAlignment(Pos.CENTER_LEFT);
-
-        undoBar.getStyleClass().add("note-undo-bar");
-        undoBar.setAlignment(Pos.CENTER_LEFT);
-        var undo = new Button("Undo");
-        undo.setOnAction(e -> undoDelete());
-        undoBar.getChildren().addAll(undoLabel, undo);
-        hide(undoBar);
 
         fixed.setWrapText(true);
         fixed.setEditable(false);
@@ -166,23 +165,21 @@ public final class NotesWindow {
         editor.setPadding(new Insets(8));
 
         autosave.setOnFinished(e -> flush());
-        undoTimer.setOnFinished(e -> {
-            deleted = null;
-            hide(undoBar);
-        });
         titleField.textProperty().addListener((o, a, b) -> changed());
         body.textProperty().addListener((o, a, b) -> changed());
 
         var split = new SplitPane(side, editor);
         split.setOrientation(Orientation.HORIZONTAL);
         split.setDividerPositions(0.34);
-        var scene = new Scene(split, 960, 640);
+        var root = new BorderPane(split);
+        root.setBottom(Dialogs.keyHint("Ctrl+N new   Ctrl+P pin   Ctrl+Del delete (in the list)   Esc close"));
+        var scene = new Scene(root, 960, 640);
         scene.getStylesheets().add(NotesWindow.class.getResource("/app.css").toExternalForm());
         scene.getStylesheets().add(NotesWindow.class.getResource("/notes.css").toExternalForm());
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (NEW.match(e)) {
                 newNote();
-            } else if (DELETE.match(e)) {
+            } else if (DELETE.match(e) && scene.getFocusOwner() == list) {
                 deleteCurrent();
             } else if (PIN.match(e)) {
                 togglePin();
@@ -192,6 +189,15 @@ public final class NotesWindow {
             e.consume();
         });
         window.setScene(scene);
+        Dialogs.closeOnEscape(scene, window);
+        Dialogs.escapeKeepsText(titleField);
+        window.setOnCloseRequest(e -> {
+            flush();
+            if (dirty && !Dialogs.confirm(window, "Close without saving?",
+                    "The last edit could not be saved and will be lost.", "Close")) {
+                e.consume();
+            }
+        });
 
         var paths = FXCollections.<String>observableArrayList();
         paths.add(null);
@@ -253,15 +259,22 @@ public final class NotesWindow {
                 return;
             }
         }
-        status.setText("Saved");
+        say("Saved");
         refresh();
     }
 
-    /** Autosave must not interrupt typing: report in the status line and keep the edits dirty to retry. */
+    /** Autosave must not interrupt typing: report in red in the status line and keep the edits dirty to retry. */
     private void failedSave(RuntimeException e) {
         System.err.println(e.getMessage());
         dirty = true;
-        status.setText("Saving failed");
+        say("Saving failed");
+        status.getStyleClass().add("note-status-error");
+    }
+
+    /** Shows a message in the status line in its normal colour. */
+    private void say(String text) {
+        status.getStyleClass().remove("note-status-error");
+        status.setText(text);
     }
 
     private void load(Note note) {
@@ -289,7 +302,7 @@ public final class NotesWindow {
         flush();
         list.getSelectionModel().clearSelection();
         load(null);
-        status.setText("");
+        say("");
         titleField.requestFocus();
     }
 
@@ -314,27 +327,18 @@ public final class NotesWindow {
         if (current < 0) {
             return;
         }
-        deleted = store.find(current);
+        var note = store.find(current);
         if (!Dialogs.attempt(window, "Cannot delete the note", () -> store.delete(current))) {
-            deleted = null;
             return;
         }
         load(null);
         refresh();
-        if (deleted != null) {
-            show(undoBar);
-            undoTimer.playFromStart();
+        if (note != null) {
+            undoBar.offer(UndoBar.deleted(note.displayTitle()), () -> restore(note));
         }
     }
 
-    private void undoDelete() {
-        undoTimer.stop();
-        hide(undoBar);
-        if (deleted == null) {
-            return;
-        }
-        var note = deleted;
-        deleted = null;
+    private void restore(Note note) {
         long id;
         try {
             id = store.restore(note);
@@ -361,14 +365,14 @@ public final class NotesWindow {
             return;
         }
         fixButton.setDisable(true);
-        status.setText("Correcting…");
+        say("Correcting…");
         long id = current;
         var thread = new Thread(() -> {
             try {
                 var result = corrector.correct(text);
                 Platform.runLater(() -> {
                     fixButton.setDisable(false);
-                    status.setText("");
+                    say("");
                     if (id >= 0) {
                         Dialogs.attempt(window, "Cannot save the correction", () -> store.corrected(id, result));
                     }
@@ -378,7 +382,7 @@ public final class NotesWindow {
             } catch (IOException e) {
                 Platform.runLater(() -> {
                     fixButton.setDisable(false);
-                    status.setText("Correction failed: " + e.getMessage());
+                    say("Correction failed: " + e.getMessage());
                 });
             }
         }, "note-corrector");

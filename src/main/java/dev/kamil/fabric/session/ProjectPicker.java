@@ -2,6 +2,7 @@ package dev.kamil.fabric.session;
 
 import dev.kamil.fabric.git.CloneDialog;
 import dev.kamil.fabric.Dialogs;
+import dev.kamil.fabric.UndoBar;
 import java.nio.file.Path;
 import java.util.List;
 import javafx.beans.binding.Bindings;
@@ -138,11 +139,19 @@ public final class ProjectPicker extends Dialog<ProjectPicker.Choice> {
                 reload.run();
             }
         });
+        var undoBar = new UndoBar();
         sessions.setOnKeyPressed(e -> {
             var selected = sessions.getSelectionModel().getSelectedItem();
             if (e.getCode() == javafx.scene.input.KeyCode.DELETE && selected != null) {
-                Dialogs.attempt(pane.getScene().getWindow(), "Cannot remove the session",
-                        () -> store.delete(List.of(selected.id())));
+                var window = pane.getScene().getWindow();
+                boolean pinned = store.isPinned(selected.id());
+                if (Dialogs.attempt(window, "Cannot remove the session", () -> store.delete(List.of(selected.id())))
+                        && !pinned) {
+                    undoBar.offer(UndoBar.deleted(selected.title()), () -> {
+                        Dialogs.attempt(window, "Cannot restore the session", () -> store.restore(selected));
+                        reload.run();
+                    });
+                }
                 reload.run();
                 e.consume();
             }
@@ -152,7 +161,8 @@ public final class ProjectPicker extends Dialog<ProjectPicker.Choice> {
 
         var content = new VBox(8, new Label("Project folder"), list, folderButtons, new Label("Tool"), toolBox, customField,
                 accountLabel, accountBox,
-                new Label("Recent sessions"), sessions, new HBox(8, resume, clear));
+                new Label("Recent sessions"), sessions, new HBox(8, resume, clear, undoBar),
+                Dialogs.keyHint("Enter open   Delete remove session (in the list)   Esc cancel"));
         content.setPadding(new Insets(12));
         content.setPrefWidth(480);
         pane.setContent(content);

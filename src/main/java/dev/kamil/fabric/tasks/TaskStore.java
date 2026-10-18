@@ -82,6 +82,25 @@ public final class TaskStore {
         }
     }
 
+    /** Puts a deleted task back with its dates under a new id and returns it, or -1 on failure. */
+    public synchronized long restore(Task task) {
+        try (var con = db.connect();
+                var ps = con.prepareStatement(
+                        "INSERT INTO task (text, due_date, done_at, created_at) VALUES (?, ?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, task.text());
+            ps.setDate(2, task.due() == null ? null : Date.valueOf(task.due()));
+            ps.setTimestamp(3, task.doneAt() == null ? null : Timestamp.from(task.doneAt()));
+            ps.setTimestamp(4, Timestamp.from(task.createdAt()));
+            ps.executeUpdate();
+            try (var keys = ps.getGeneratedKeys()) {
+                return keys.next() ? keys.getLong(1) : -1;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Cannot restore task: " + e.getMessage(), e);
+        }
+    }
+
     /** Open tasks: dated first (earliest first), undated last, then oldest first. */
     public synchronized List<Task> open() {
         return query("SELECT " + COLUMNS + " FROM task WHERE done_at IS NULL "

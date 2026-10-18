@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /** Finds Java and Node processes through /proc and {@code ss}. Blocks; call off the UI thread. */
-public final class DevProcesses {
+public class DevProcesses {
 
     private static final Pattern SS_PID = Pattern.compile("pid=(\\d+)");
     private static final Pattern SS_PORT = Pattern.compile(":(\\d+)$");

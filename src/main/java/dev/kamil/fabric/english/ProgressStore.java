@@ -9,18 +9,21 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Reads and writes the flashcards progress file. */
+/** Reads and writes the flashcards progress file of the list. */
 public final class ProgressStore {
 
-    /** The progress file; tests point it at a temporary file. */
-    static Path file = Path.of("/home/kamil/Documents/Tools/english/flashcards.csv");
-
     private ProgressStore() {
+    }
+
+    /** The progress file of the list: my-list.progress.csv in the english folder. */
+    private static Path progressFile() {
+        return SentenceList.of(EnglishWindow.dir).progress();
     }
 
     /** Saved progress by English text; empty when the file does not exist. */
     static Map<String, CardProgress> load() throws IOException {
         var result = new LinkedHashMap<String, CardProgress>();
+        var file = progressFile();
         if (Files.exists(file)) {
             for (var p : CardProgress.load(file)) {
                 result.put(p.english(), p);
@@ -32,6 +35,7 @@ public final class ProgressStore {
     /** Saves {@code changed} and keeps the saved rows of other sentences that still exist in {@code all}. */
     static void save(List<CardProgress> changed, List<Sentence> all) throws IOException {
         var merged = new ArrayList<>(changed);
+        var file = progressFile();
         if (Files.exists(file)) {
             var inChanged = new HashSet<String>();
             merged.forEach(p -> inChanged.add(p.english()));
@@ -48,6 +52,7 @@ public final class ProgressStore {
 
     /** Removes the saved row of {@code english}, if any, so the sentence is new again. */
     static void forget(String english) throws IOException {
+        var file = progressFile();
         if (!Files.exists(file)) {
             return;
         }

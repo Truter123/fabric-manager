@@ -64,4 +64,23 @@ class SentenceFileTest {
         assertEquals(changed, SentenceFile.load(file));
         assertEquals(2, list.size());
     }
+
+    @Test
+    void savedFileIsTitledAfterItsList(@TempDir Path dir) throws IOException {
+        var one = List.of(new Sentence("2026-10-18", "I am late", "Spóźniam się", "", ""));
+        SentenceFile.save(dir.resolve("Work.md"), one);
+        SentenceFile.save(dir.resolve("Work.removed.md"), one);
+        assertEquals("# Work", Files.readAllLines(dir.resolve("Work.md")).get(0));
+        assertEquals("# Work (removed)", Files.readAllLines(dir.resolve("Work.removed.md")).get(0));
+        assertEquals(one, SentenceFile.load(dir.resolve("Work.md")));
+    }
+
+    @Test
+    void theListFileIsTitledMySentences(@TempDir Path dir) throws IOException {
+        var one = List.of(new Sentence("2026-10-18", "I am late", "Spóźniam się", "", ""));
+        SentenceFile.save(dir.resolve("my-list.md"), one);
+        SentenceFile.save(dir.resolve("my-list.removed.md"), one);
+        assertEquals("# My sentences", Files.readAllLines(dir.resolve("my-list.md")).get(0));
+        assertEquals("# My sentences (removed)", Files.readAllLines(dir.resolve("my-list.removed.md")).get(0));
+    }
 }

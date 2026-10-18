@@ -49,8 +49,8 @@ import javafx.scene.text.Text;
 import javafx.stage.Window;
 
 /**
- * The sentences of everyday.md as a list of cards, newest first: voice, takes, edit and soft delete; one pane of the
- * English window. Removed sentences move to removed.md on save.
+ * The sentences of my-list.md as cards, newest first: voice, takes, edit and soft delete; one pane of the
+ * English window. Removed sentences move to my-list.removed.md on save.
  */
 final class SentencesPane extends BorderPane {
 
@@ -60,9 +60,10 @@ final class SentencesPane extends BorderPane {
 
     private final Window owner;
     private final Runnable onChange;
-    /** The sentences that stay in everyday.md. */
+    private final Runnable home;
+    /** The sentences that stay in the list file. */
     private final List<Sentence> backing = new ArrayList<>();
-    /** Every removed sentence: removed.md plus the ones removed since the last load or save. */
+    /** Every removed sentence: the list's removed file plus the ones removed since the last load or save. */
     private final List<Sentence> removed = new ArrayList<>();
     /** Removed since the last load or save: they still show as a one-line row with Undo. */
     private final List<Sentence> justRemoved = new ArrayList<>();
@@ -90,10 +91,11 @@ final class SentencesPane extends BorderPane {
     private int changes;
     private FileTime loadedMtime;
 
-    /** {@code onChange} runs when the unsaved-change count changes. */
-    SentencesPane(Window owner, Runnable onChange) {
+    /** {@code onChange} runs when the unsaved-change count changes; {@code home} is the Home (Esc) button. */
+    SentencesPane(Window owner, Runnable onChange, Runnable home) {
         this.owner = owner;
         this.onChange = onChange;
+        this.home = home;
         build();
     }
 
@@ -173,12 +175,13 @@ final class SentencesPane extends BorderPane {
             AppSettings.shared().setString(VIEW_KEY, tableView ? "table" : "cards");
             applyView();
         });
+        var homeButton = button("Home (Esc)", "Back to the English home (Esc)", home);
         var add = button("Add", "Add (Ctrl+N)", this::add);
         editButton.setTooltip(new Tooltip("Edit the selected row (Ctrl+E)"));
         editButton.setOnAction(e -> editSelected());
         var save = button("Save", "Save (Ctrl+S)", this::save);
         var reload = button("⟳", "Reload (F5)", this::reload);
-        var bar = new HBox(8, search, count, cardsToggle, tableToggle, add, editButton, save, reload);
+        var bar = new HBox(8, homeButton, search, count, cardsToggle, tableToggle, add, editButton, save, reload);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(8));
 
@@ -192,7 +195,11 @@ final class SentencesPane extends BorderPane {
         buildTable();
         tableBox.setPadding(new Insets(8));
 
-        var statusBar = new HBox(status);
+        var apart = new Region();
+        HBox.setHgrow(apart, Priority.ALWAYS);
+        var statusBar = new HBox(status, apart, Dialogs.keyHint(
+                "Ctrl+N add   Ctrl+E edit (table)   Ctrl+S save   Ctrl+T cards/table   F5 reload   Esc home"));
+        statusBar.setAlignment(Pos.CENTER_LEFT);
         statusBar.setPadding(new Insets(6, 8, 6, 8));
         setTop(bar);
         setBottom(statusBar);
@@ -716,9 +723,13 @@ final class SentencesPane extends BorderPane {
         return changes + " unsaved change" + (changes == 1 ? "" : "s");
     }
 
+    private static SentenceList list() {
+        return SentenceList.of(EnglishWindow.dir);
+    }
+
     private FileTime mtime() {
         try {
-            return Files.getLastModifiedTime(EnglishWindow.file);
+            return Files.getLastModifiedTime(list().sentences());
         } catch (IOException e) {
             return null;
         }
@@ -731,15 +742,15 @@ final class SentencesPane extends BorderPane {
         justRemoved.clear();
         changes = 0;
         loadedMtime = null;
-        if (!Files.exists(EnglishWindow.file)) {
-            Dialogs.error(owner, "Cannot read sentences", EnglishWindow.file + " does not exist. Save will create it.");
-            status.setText("File missing — Save creates it");
+        var list = list();
+        if (!Files.exists(list.sentences())) {
+            status.setText("No sentences yet — Save creates the file");
         } else {
             try {
-                backing.addAll(SentenceFile.load(EnglishWindow.file));
+                backing.addAll(SentenceFile.load(list.sentences()));
                 loadedMtime = mtime();
-                if (Files.exists(EnglishWindow.removedFile())) {
-                    removed.addAll(SentenceFile.load(EnglishWindow.removedFile()));
+                if (Files.exists(list.removed())) {
+                    removed.addAll(SentenceFile.load(list.removed()));
                 }
                 status.setText("Loaded " + backing.size() + " sentences");
             } catch (IOException e) {
@@ -777,7 +788,8 @@ final class SentencesPane extends BorderPane {
     }
 
     boolean save() {
-        if (Files.exists(EnglishWindow.file) && loadedMtime != null && !loadedMtime.equals(mtime())) {
+        var list = list();
+        if (Files.exists(list.sentences()) && loadedMtime != null && !loadedMtime.equals(mtime())) {
             var reload = new ButtonType("Reload (lose edits)", ButtonBar.ButtonData.NO);
             var overwrite = new ButtonType("Overwrite", ButtonBar.ButtonData.YES);
             var alert = new Alert(Alert.AlertType.NONE, "The file was modified since it was loaded.", reload,
@@ -796,9 +808,9 @@ final class SentencesPane extends BorderPane {
             }
         }
         try {
-            SentenceFile.save(EnglishWindow.file, backing);
-            if (!removed.isEmpty() || Files.exists(EnglishWindow.removedFile())) {
-                SentenceFile.save(EnglishWindow.removedFile(), removed);
+            SentenceFile.save(list.sentences(), backing);
+            if (!removed.isEmpty() || Files.exists(list.removed())) {
+                SentenceFile.save(list.removed(), removed);
             }
         } catch (IOException e) {
             Dialogs.error(owner, "Cannot save sentences", e.getMessage());

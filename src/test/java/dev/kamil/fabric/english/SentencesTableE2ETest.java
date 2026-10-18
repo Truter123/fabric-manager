@@ -50,10 +50,9 @@ class SentencesTableE2ETest {
     @BeforeEach
     void prepare() throws Exception {
         previousSettings = AppSettings.use(AppSettings.inMemory());
-        sentences = dir.resolve("english/everyday.md");
-        removedFile = dir.resolve("english/removed.md");
-        EnglishWindow.file = sentences;
-        ProgressStore.file = dir.resolve("english/flashcards.csv");
+        EnglishWindow.dir = dir.resolve("english");
+        sentences = dir.resolve("english/my-list.md");
+        removedFile = dir.resolve("english/my-list.removed.md");
         RecordingHistory.standardRoot = dir.resolve("english/recordings");
         savedCache = Voice.cacheDir;
         Voice.cacheDir = dir.resolve("english/tts");

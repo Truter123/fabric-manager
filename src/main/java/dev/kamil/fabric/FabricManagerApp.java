@@ -45,9 +45,7 @@ import javafx.scene.Scene;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.image.Image;
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyCodeCombination;
-import javafx.scene.input.KeyCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.BorderPane;
@@ -132,7 +130,8 @@ public final class FabricManagerApp extends Application {
             Ctrl+Shift+K   tasks
             Ctrl+Shift+P   processes
             Ctrl+Shift+V   body double video
-            Ctrl+Shift+Q   quotes""");
+            Ctrl+Shift+Q   quotes
+            F1             all keys""");
         empty.getStyleClass().add("empty-hint");
         empty.visibleProperty().bind(javafx.beans.binding.Bindings.isEmpty(tabs.getTabs()));
         empty.setMouseTransparent(true);
@@ -201,10 +200,16 @@ public final class FabricManagerApp extends Application {
         if (sidebar.usageExpandedProperty().get()) {
             setUsagePolling(true);
         }
-        // A click on a tab header or a sidebar row takes the keyboard focus; give it back to the terminal.
+        // A click on a tab header or a sidebar row takes the keyboard focus; give it back to the terminal. A click
+        // outside the open overview closes it first, or Esc would reach the terminal behind it.
         root.addEventHandler(MouseEvent.MOUSE_RELEASED, e -> {
-            if (e.getButton() == MouseButton.PRIMARY
-                    && tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
+            if (e.getButton() != MouseButton.PRIMARY) {
+                return;
+            }
+            if (overview.isOpen() && !(e.getTarget() instanceof javafx.scene.Node n && inside(n, overview))) {
+                overview.close();
+            }
+            if (tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
                 tab.focus();
             }
         });
@@ -277,67 +282,80 @@ public final class FabricManagerApp extends Application {
         var accelerators = scene.getAccelerators();
         // Each sidebar button and its shortcut run the same action.
         var actions = new java.util.ArrayList<SessionSidebar.Action>();
-        java.util.function.BiConsumer<KeyCombination, SessionSidebar.Action> add = (keys, action) -> {
+        // Snippets, Worktree and Changes act on the selected session: disabled while no terminal tab is selected
+        var hasSession = javafx.beans.binding.Bindings.createBooleanBinding(
+                () -> tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab,
+                tabs.getSelectionModel().selectedItemProperty());
+        java.util.function.BiConsumer<Shortcut, SessionSidebar.Action> add = (shortcut, action) -> {
             var run = action.run();
-            accelerators.put(keys, () -> Platform.runLater(run));
+            accelerators.put(shortcut.combo(), () -> Platform.runLater(run));
             actions.add(action);
         };
-        add.accept(combo(KeyCode.N), new SessionSidebar.Action(SessionSidebar.Group.PRIMARY, "+", "New", "Ctrl+Shift+N  new session", this::pick));
-        add.accept(combo(KeyCode.T), new SessionSidebar.Action(SessionSidebar.Group.PRIMARY, ">_", "Shell", "Ctrl+Shift+T  shell in this folder",
+        add.accept(Shortcut.NEW, new SessionSidebar.Action(SessionSidebar.Group.PRIMARY, "+", "New", Shortcut.NEW.tooltip(), this::pick));
+        add.accept(Shortcut.SHELL, new SessionSidebar.Action(SessionSidebar.Group.PRIMARY, ">_", "Shell", Shortcut.SHELL.tooltip(),
                 () -> open(Tool.SHELL, currentDirectory(), currentAccount())));
-        add.accept(combo(KeyCode.COMMA), new SessionSidebar.Action(SessionSidebar.Group.FOOTER, "⚙", "Settings", "Ctrl+Shift+,  Claude settings",
+        add.accept(Shortcut.SETTINGS, new SessionSidebar.Action(SessionSidebar.Group.FOOTER, "⚙", "Settings", Shortcut.SETTINGS.tooltip(),
                 () -> openClaudeSettings(currentDirectory(), currentAccount())));
-        add.accept(combo(KeyCode.J), new SessionSidebar.Action(SessionSidebar.Group.GRID, "✎", "Notes", "Ctrl+Shift+J  notes",
+        add.accept(Shortcut.NOTES, new SessionSidebar.Action(SessionSidebar.Group.GRID, "✎", "Notes", Shortcut.NOTES.tooltip(),
                 () -> NotesWindow.open(stage, db)));
-        add.accept(combo(KeyCode.K), new SessionSidebar.Action(SessionSidebar.Group.GRID, "☐", "Tasks", "Ctrl+Shift+K  tasks",
+        add.accept(Shortcut.TASKS, new SessionSidebar.Action(SessionSidebar.Group.GRID, "☐", "Tasks", Shortcut.TASKS.tooltip(),
                 () -> TasksWindow.open(stage, db)));
-        add.accept(combo(KeyCode.S), new SessionSidebar.Action(SessionSidebar.Group.GRID, "⌘", "Snippets", "Ctrl+Shift+S  snippets",
-                this::openSnippets));
-        add.accept(combo(KeyCode.H), new SessionSidebar.Action(SessionSidebar.Group.GRID, "⎇", "History", "Ctrl+Shift+H  git history",
+        add.accept(Shortcut.SNIPPETS, new SessionSidebar.Action(SessionSidebar.Group.GRID, "⌘", "Snippets", Shortcut.SNIPPETS.tooltip(),
+                this::openSnippets, hasSession));
+        add.accept(Shortcut.HISTORY, new SessionSidebar.Action(SessionSidebar.Group.GRID, "⎇", "History", Shortcut.HISTORY.tooltip(),
                 () -> openHistory(currentDirectory())));
-        add.accept(combo(KeyCode.P), new SessionSidebar.Action(SessionSidebar.Group.GRID, "▤", "Processes", "Ctrl+Shift+P  Docker, Java and Node",
+        add.accept(Shortcut.PROCESSES, new SessionSidebar.Action(SessionSidebar.Group.GRID, "▤", "Processes", Shortcut.PROCESSES.tooltip(),
                 () -> ProcessesWindow.open(stage, (command, directory) -> open(
                         command == null ? Tool.SHELL : new Tool("command", command), directory, currentAccount()))));
-        add.accept(combo(KeyCode.V), new SessionSidebar.Action(SessionSidebar.Group.GRID, "▶", "Video", "Ctrl+Shift+V  body double video",
+        add.accept(Shortcut.VIDEO, new SessionSidebar.Action(SessionSidebar.Group.GRID, "▶", "Video", Shortcut.VIDEO.tooltip(),
                 () -> BodyDoubleWindow.toggle(stage, db)));
-        add.accept(combo(KeyCode.Q), new SessionSidebar.Action(SessionSidebar.Group.GRID, "❝", "Quotes", "Ctrl+Shift+Q  your quotes",
+        add.accept(Shortcut.QUOTES, new SessionSidebar.Action(SessionSidebar.Group.GRID, "❝", "Quotes", Shortcut.QUOTES.tooltip(),
                 () -> dev.kamil.fabric.quotes.QuotesWindow.open(stage, db, quoteBar::refresh)));
-        add.accept(combo(KeyCode.E), new SessionSidebar.Action(SessionSidebar.Group.GRID, "A", "English", "Ctrl+Shift+E  English sentences",
+        add.accept(Shortcut.ENGLISH, new SessionSidebar.Action(SessionSidebar.Group.GRID, "A", "English", Shortcut.ENGLISH.tooltip(),
                 () -> EnglishWindow.open(stage)));
-        add.accept(combo(KeyCode.A), new SessionSidebar.Action(SessionSidebar.Group.GRID, "◧", "Agents", "Ctrl+Shift+A  agents panel",
+        add.accept(Shortcut.AGENTS, new SessionSidebar.Action(SessionSidebar.Group.GRID, "◧", "Agents", Shortcut.AGENTS.tooltip(),
                 () -> root.setRight(root.getRight() == null ? agentsPanel : null)));
-        add.accept(combo(KeyCode.O), new SessionSidebar.Action(SessionSidebar.Group.GRID, "▦", "Overview", "Ctrl+Shift+O  overview of all sessions",
+        add.accept(Shortcut.OVERVIEW, new SessionSidebar.Action(SessionSidebar.Group.GRID, "▦", "Overview", Shortcut.OVERVIEW.tooltip(),
                 () -> overview.toggle()));
-        add.accept(combo(KeyCode.G), new SessionSidebar.Action(SessionSidebar.Group.GRID, "⇄", "SSH", "Ctrl+Shift+G  connect to a server",
+        add.accept(Shortcut.SSH, new SessionSidebar.Action(SessionSidebar.Group.GRID, "⇄", "SSH", Shortcut.SSH.tooltip(),
                 this::openSsh));
-        add.accept(combo(KeyCode.B), new SessionSidebar.Action(SessionSidebar.Group.GRID, "⑂", "Worktree", "Ctrl+Shift+B  new session in a git worktree",
-                this::openWorktree));
-        add.accept(combo(KeyCode.C), new SessionSidebar.Action(SessionSidebar.Group.GRID, "±", "Changes", "Ctrl+Shift+C  git changes of this session",
-                this::openChanges));
-        add.accept(combo(KeyCode.I), new SessionSidebar.Action(SessionSidebar.Group.GRID, "💧", "Water", "Ctrl+Shift+I  water reminder",
+        add.accept(Shortcut.WORKTREE, new SessionSidebar.Action(SessionSidebar.Group.GRID, "⑂", "Worktree", Shortcut.WORKTREE.tooltip(),
+                this::openWorktree, hasSession));
+        add.accept(Shortcut.CHANGES, new SessionSidebar.Action(SessionSidebar.Group.GRID, "±", "Changes", Shortcut.CHANGES.tooltip(),
+                this::openChanges, hasSession));
+        add.accept(Shortcut.WATER, new SessionSidebar.Action(SessionSidebar.Group.GRID, "💧", "Water", Shortcut.WATER.tooltip(),
                 () -> dev.kamil.fabric.water.WaterWindow.open(stage)));
-        add.accept(combo(KeyCode.F), new SessionSidebar.Action(SessionSidebar.Group.GRID, "⌕", "Search", "Ctrl+Shift+F  search Claude transcripts",
+        add.accept(Shortcut.SERVERS, new SessionSidebar.Action(SessionSidebar.Group.GRID, "▤", "Servers", Shortcut.SERVERS.tooltip(),
+                () -> dev.kamil.fabric.servers.ServersWindow.open(stage)));
+        add.accept(Shortcut.SEARCH, new SessionSidebar.Action(SessionSidebar.Group.GRID, "⌕", "Search", Shortcut.SEARCH.tooltip(),
                 this::openTranscriptSearch));
         sidebar.setActions(actions);
         // Shortcut only: the session list already does these with a click, double-click or right-click.
-        accelerators.put(new KeyCodeCombination(KeyCode.TAB, KeyCombination.CONTROL_DOWN),
+        accelerators.put(Shortcut.NEXT_TAB.combo(),
                 () -> tabs.getSelectionModel().selectNext());
-        accelerators.put(combo(KeyCode.R), () -> {
+        accelerators.put(Shortcut.RENAME.combo(), () -> {
             if (tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
                 sidebar.rename(tab);
             }
         });
-        accelerators.put(combo(KeyCode.D), () -> {
+        accelerators.put(Shortcut.DUPLICATE.combo(), () -> {
             if (tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
                 duplicate(tab);
             }
         });
-        accelerators.put(combo(KeyCode.W), () -> {
+        accelerators.put(Shortcut.CLOSE.combo(), () -> {
             if (tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
                 Platform.runLater(tab::requestClose);
             }
         });
-        accelerators.put(combo(KeyCode.TAB), () -> tabs.getSelectionModel().selectPrevious());
+        accelerators.put(Shortcut.PREVIOUS_TAB.combo(), () -> tabs.getSelectionModel().selectPrevious());
+        // A filter, not an accelerator: a focused terminal would otherwise take F1 for itself.
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (Shortcut.KEYS.combo().match(e)) {
+                KeySheet.toggle(stage);
+                e.consume();
+            }
+        });
     }
 
     private void openSnippets() {
@@ -348,7 +366,7 @@ public final class FabricManagerApp extends Application {
 
     private void openChanges() {
         if (tabs.getSelectionModel().getSelectedItem() instanceof TerminalTab tab) {
-            new ChangesWindow(stage, tab.directory()).show();
+            ChangesWindow.open(stage, tab.directory());
         }
     }
 
@@ -375,11 +393,19 @@ public final class FabricManagerApp extends Application {
             return;
         }
         var directory = tab.directory();
-        var found = GitRepo.of(directory);
-        if (found.isEmpty()) {
-            Dialogs.error(stage, "No git repository", directory + " is not inside a git repository.");
-            return;
-        }
+        Thread.ofPlatform().daemon().name("worktree-git").start(() -> {
+            var found = GitRepo.of(directory);
+            Platform.runLater(() -> {
+                if (found.isEmpty()) {
+                    Dialogs.error(stage, "No git repository", directory + " is not inside a git repository.");
+                } else {
+                    askWorktree(tab, found.get());
+                }
+            });
+        });
+    }
+
+    private void askWorktree(TerminalTab tab, GitRepo found) {
         var dialog = new javafx.scene.control.TextInputDialog();
         dialog.setTitle("FabricManager");
         dialog.setHeaderText("Branch for the new worktree (created when it does not exist)");
@@ -387,7 +413,7 @@ public final class FabricManagerApp extends Application {
         Dialogs.style(dialog.getDialogPane());
         dialog.initOwner(stage);
         dialog.showAndWait().map(String::strip).filter(name -> !name.isEmpty()).ifPresent(branch -> {
-            var repo = found.get();
+            var repo = found;
             Dialogs.attempt(stage, "Worktree failed", () -> {
                 Path path;
                 try {
@@ -518,10 +544,14 @@ public final class FabricManagerApp extends Application {
     }
 
     private void openHistory(Path directory) {
-        GitRepo.of(directory).ifPresentOrElse(
-                repo -> HistoryWindow.open(stage, repo, GitBranch.of(directory).orElse("detached"),
-                        dir -> open(Tool.defaultTool(), dir, currentAccount())),
-                () -> Dialogs.error(stage, "No git repository", directory + " is not inside a git repository."));
+        Thread.ofPlatform().daemon().name("history-git").start(() -> {
+            var found = GitRepo.of(directory);
+            var branch = found.isPresent() ? GitBranch.of(directory).orElse("detached") : "";
+            Platform.runLater(() -> found.ifPresentOrElse(
+                    repo -> HistoryWindow.open(stage, repo, branch,
+                            dir -> open(Tool.defaultTool(), dir, currentAccount())),
+                    () -> Dialogs.error(stage, "No git repository", directory + " is not inside a git repository.")));
+        });
     }
 
     private void openClaudeSettings(Path directory, Account account) {
@@ -602,7 +632,7 @@ public final class FabricManagerApp extends Application {
     /** Asks before quitting while a tool still runs in any tab. */
     private boolean confirmQuit() {
         long running = tabs.getTabs().stream()
-                .filter(t -> t instanceof TerminalTab tab && tab.status() == TerminalTab.Status.TOOL_RUNNING)
+                .filter(t -> t instanceof TerminalTab tab && tab.busy())
                 .count();
         if (running == 0) {
             return true;
@@ -611,7 +641,12 @@ public final class FabricManagerApp extends Application {
         return Dialogs.confirm(stage, "Quit FabricManager?", sessions + " still running. Quitting ends them.", "Quit");
     }
 
-    private static KeyCodeCombination combo(KeyCode code) {
-        return new KeyCodeCombination(code, KeyCombination.CONTROL_DOWN, KeyCombination.SHIFT_DOWN);
+    private static boolean inside(javafx.scene.Node node, javafx.scene.Node ancestor) {
+        for (var n = node; n != null; n = n.getParent()) {
+            if (n == ancestor) {
+                return true;
+            }
+        }
+        return false;
     }
 }

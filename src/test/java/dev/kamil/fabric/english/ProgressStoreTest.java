@@ -19,7 +19,7 @@ class ProgressStoreTest {
 
     @BeforeEach
     void point() {
-        ProgressStore.file = dir.resolve("sub/flashcards.csv");
+        EnglishWindow.dir = dir.resolve("english");
     }
 
     private static Sentence s(String en) {

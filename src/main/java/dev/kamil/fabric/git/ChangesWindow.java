@@ -3,10 +3,15 @@ package dev.kamil.fabric.git;
 import dev.kamil.fabric.Dialogs;
 import dev.kamil.fabric.session.HistoryWindow;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -21,6 +26,7 @@ import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.Window;
@@ -29,8 +35,11 @@ import javafx.stage.Window;
 public final class ChangesWindow {
 
     private static final int MAX_DIFF_LINES = 5000;
+    private static final Map<Path, ChangesWindow> OPEN = new HashMap<>();
 
-    private final GitRepo repo;
+    private final Path directory;
+    private volatile GitRepo repo;
+    private Scene scene;
     private final Stage window = new Stage();
     private final ListView<GitRepo.Change> list = new ListView<>();
     private final ListView<DiffView.Row> diff = new ListView<>();
@@ -39,24 +48,67 @@ public final class ChangesWindow {
     private final Button commit = new Button("Commit all");
     private final Button discard = new Button("Discard file");
     private final Button refresh = new Button("Refresh");
+    /** True once the repository is found; Commit stays off until then. */
+    private final BooleanProperty loaded = new SimpleBooleanProperty();
+    /** True while a commit runs, so a second Enter or click cannot commit twice. */
+    private final BooleanProperty committing = new SimpleBooleanProperty();
     private final AtomicInteger generation = new AtomicInteger();
 
+    /** Opens the window for {@code directory}, or brings the existing one to front. */
+    public static void open(Window owner, Path directory) {
+        var key = directory.toAbsolutePath().normalize();
+        var existing = OPEN.get(key);
+        if (existing != null) {
+            existing.window.show();
+            existing.window.setIconified(false);
+            existing.window.toFront();
+            existing.window.requestFocus();
+            return;
+        }
+        var created = new ChangesWindow(owner, key);
+        OPEN.put(key, created);
+        created.window.setOnHidden(e -> OPEN.remove(key));
+        created.show();
+    }
+
+    /** The open window's stage for {@code directory}, or null; a seam for tests. */
+    static Stage openStage(Path directory) {
+        var open = OPEN.get(directory.toAbsolutePath().normalize());
+        return open == null ? null : open.window;
+    }
+
     public ChangesWindow(Window owner, Path directory) {
-        repo = GitRepo.of(directory).orElse(null);
+        this.directory = directory;
         window.initOwner(owner);
         window.setTitle("Changes — " + directory.getFileName());
-        var scene = new Scene(repo == null ? notARepository() : build(), 1000, 650);
+        refresh.setDisable(true);
+        scene = new Scene(build(), 1000, 650);
         scene.getStylesheets().add(ChangesWindow.class.getResource("/app.css").toExternalForm());
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.ESCAPE), () -> Dialogs.closeLater(window));
         window.setScene(scene);
     }
 
+    /** The window stage; for tests. */
+    Stage stage() {
+        return window;
+    }
+
     public void show() {
         window.show();
         window.toFront();
-        if (repo != null) {
-            reload();
-        }
+        background(() -> {
+            var found = GitRepo.of(directory).orElse(null);
+            Platform.runLater(() -> {
+                if (found == null) {
+                    scene.setRoot(notARepository());
+                    return;
+                }
+                repo = found;
+                loaded.set(true);
+                refresh.setDisable(false);
+                reload();
+            });
+        });
     }
 
     private static BorderPane notARepository() {
@@ -81,15 +133,26 @@ public final class ChangesWindow {
 
         message.setPromptText("Commit message");
         HBox.setHgrow(message, Priority.ALWAYS);
+        commit.getStyleClass().add("primary");
+        commit.disableProperty().bind(loaded.not().or(committing)
+                .or(Bindings.createBooleanBinding(() -> message.getText().isBlank(), message.textProperty())));
         commit.setOnAction(e -> commitAll());
+        message.setOnAction(e -> {
+            if (!commit.isDisabled()) {
+                commitAll();
+            }
+        });
         discard.setOnAction(e -> discardSelected());
         refresh.setOnAction(e -> reload());
         discard.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
-        var bar = new HBox(8, message, commit, discard, refresh);
+        var apart = new Region();
+        apart.setMinWidth(32);
+        var bar = new HBox(8, message, commit, apart, discard, refresh);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(6));
 
-        var root = new BorderPane(split, null, null, bar, null);
+        var footer = new VBox(bar, Dialogs.keyHint("Enter (in the message) commit   Esc close"));
+        var root = new BorderPane(split, null, null, footer, null);
         root.getStyleClass().addAll("root", "history");
         return root;
     }
@@ -147,15 +210,20 @@ public final class ChangesWindow {
 
     private void commitAll() {
         var text = message.getText();
+        committing.set(true);
         background(() -> {
             try {
                 repo.commitAll(text);
                 Platform.runLater(() -> {
+                    committing.set(false);
                     message.clear();
                     reload();
                 });
             } catch (GitRepo.GitException e) {
-                Platform.runLater(() -> Dialogs.error(window, "Cannot commit", e.getMessage()));
+                Platform.runLater(() -> {
+                    committing.set(false);
+                    Dialogs.error(window, "Cannot commit", e.getMessage());
+                });
             }
         });
     }

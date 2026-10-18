@@ -51,6 +51,7 @@ public final class CloneDialog extends Dialog<Path> {
     private boolean lastWasProgress;
     private volatile Process process;
     private volatile boolean cancelled;
+    private boolean stopConfirmed;
     private volatile boolean createdByUs;
     private Path cloneTarget;
 
@@ -103,6 +104,16 @@ public final class CloneDialog extends Dialog<Path> {
         cloneButton.addEventFilter(ActionEvent.ACTION, e -> {
             e.consume();
             start();
+        });
+        pane.lookupButton(ButtonType.CANCEL).addEventFilter(ActionEvent.ACTION, e -> {
+            if (!confirmStop()) {
+                e.consume();
+            }
+        });
+        setOnCloseRequest(e -> {
+            if (!confirmStop()) {
+                e.consume();
+            }
         });
         setOnHidden(e -> cancelClone());
         setOnShown(e -> urlField.requestFocus());
@@ -186,11 +197,14 @@ public final class CloneDialog extends Dialog<Path> {
         status.setText("");
         if (urlField.getText().isBlank()) {
             target.setText("Will clone into: …");
+            status.setText("Enter a repository URL");
             return;
         }
         var t = targetPath();
         target.setText("Will clone into: " + (t != null ? t : parentField.getText().trim()));
-        if (t != null && existsNonEmpty(t)) {
+        if (!validParent()) {
+            status.setText("Parent folder does not exist");
+        } else if (t != null && existsNonEmpty(t)) {
             status.setText("Folder already exists");
         }
     }
@@ -209,6 +223,7 @@ public final class CloneDialog extends Dialog<Path> {
         cloneTarget = t;
         createdByUs = !Files.exists(t);
         cancelled = false;
+        stopConfirmed = false;
         lines.clear();
         lastWasProgress = false;
         log.clear();
@@ -287,6 +302,16 @@ public final class CloneDialog extends Dialog<Path> {
         if (createdByUs && cloneTarget != null && Files.isDirectory(cloneTarget)) {
             deleteQuietly(cloneTarget);
         }
+    }
+
+    /** Cancelling stops a running clone and removes its folder, so ask first; after a yes, do not ask again. */
+    private boolean confirmStop() {
+        if (!running.get() || stopConfirmed) {
+            return true;
+        }
+        stopConfirmed = Dialogs.confirm(getDialogPane().getScene().getWindow(), "Stop cloning?",
+                "The clone stops and the folder it created is removed.", "Stop");
+        return stopConfirmed;
     }
 
     /** Stops a running clone and removes a folder the clone created. */

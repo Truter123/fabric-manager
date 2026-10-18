@@ -29,11 +29,12 @@ public final class Deck {
     private int total;
     private int done;
     private int good;
+    private int skipped;
     private final java.util.Set<String> missed = new java.util.HashSet<>();
     private final Deque<Step> history = new ArrayDeque<>();
 
-    /** State before one grade, so {@link #back()} can restore it. */
-    private record Step(Sentence card, CardProgress old, int done, int good, boolean wasMissed) {
+    /** State before one grade or skip, so {@link #back()} can restore it. */
+    private record Step(Sentence card, CardProgress old, int done, int good, int skipped, boolean wasMissed) {
     }
 
     public Deck(List<Sentence> sentences, Map<String, CardProgress> saved, LocalDate today) {
@@ -104,14 +105,28 @@ public final class Deck {
         total--;
     }
 
-    /** True when a grade of this session can be undone. */
+    /**
+     * Leaves the current card for this session without a grade: it keeps its progress, stays due and is not
+     * offered again until a new session. {@link #back()} returns it to the front unchanged.
+     */
+    public void skip() {
+        var card = queue.pollFirst();
+        if (card == null) {
+            return;
+        }
+        history.addFirst(new Step(card, progress.get(card.english()), done, good, skipped,
+                missed.contains(card.english())));
+        skipped++;
+    }
+
+    /** True when a grade or skip of this session can be undone. */
     public boolean canBack() {
         return !history.isEmpty();
     }
 
     /**
-     * Undoes the last grade: the card returns to the front of the queue with its old progress and counts.
-     * Returns false when nothing was graded yet.
+     * Undoes the last grade or skip: the card returns to the front of the queue with its old progress and counts.
+     * Returns false when nothing was graded or skipped yet.
      */
     public boolean back() {
         var step = history.pollFirst();
@@ -124,6 +139,7 @@ public final class Deck {
         progress.put(english, step.old());
         done = step.done();
         good = step.good();
+        skipped = step.skipped();
         if (step.wasMissed()) {
             missed.add(english);
         } else {
@@ -138,7 +154,7 @@ public final class Deck {
             return;
         }
         var old = progress.get(card.english());
-        history.addFirst(new Step(card, old, done, good, missed.contains(card.english())));
+        history.addFirst(new Step(card, old, done, good, skipped, missed.contains(card.english())));
         if (grade == Grade.AGAIN) {
             progress.put(card.english(), new CardProgress(card.english(), 1, today));
             missed.add(card.english());
@@ -161,6 +177,16 @@ public final class Deck {
     /** Cards finished in this session (graded Good or Easy). */
     public int done() {
         return done;
+    }
+
+    /** Cards left behind in this session: graded Good or Easy, or skipped; the number before the current card. */
+    public int position() {
+        return done + skipped;
+    }
+
+    /** Cards skipped in this session; they keep their progress and stay due. */
+    public int skipped() {
+        return skipped;
     }
 
     /** Cards finished in this session without an Again. */

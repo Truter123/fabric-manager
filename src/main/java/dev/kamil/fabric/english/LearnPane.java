@@ -10,13 +10,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Text;
@@ -31,28 +30,22 @@ final class LearnPane extends VBox {
     private final int size;
     private final List<Sentence> all;
     private final Consumer<Sentence> onRemove;
-    private final Label counter = new Label();
+    private final CardFrame frame;
     private final Text english = bigText(26, null);
     private final Text pl = bigText(20, null);
     private final Text say = bigText(15, "-fx-font-family: '" + SentencesPane.fontFamily() + "';");
     private final Text watch = bigText(15, null);
     private final Label hint = new Label("Record yourself at least once (R)");
     private final Button know = new Button("I know it (Space)");
-    private final Button skip = new Button("Skip (N)");
     private final Button listen = new Button("Listen (L)");
-    private final Button remove = new Button("Remove (Del)");
     private final Label notice = new Label();
     private final Label endNotice = new Label();
     private final Text endText = bigText(20, null);
     private final Button more;
-    private final Button homeButton = new Button("Home (Esc)");
-    private final Button cardHome = new Button("Home (Esc)");
-    private final Button back = new Button("Back (←)");
-    private final Button endBack = new Button("Back (←)");
     private final Set<String> known = new HashSet<>();
     private final AttemptsPanel attempts;
     private final VBox card = new VBox(14);
-    private final VBox content = new VBox();
+    private final VBox endBox = new VBox(16);
     private final Set<String> skipped = new HashSet<>();
     private List<Sentence> batch = new ArrayList<>();
     private int index;
@@ -71,35 +64,18 @@ final class LearnPane extends VBox {
         this.all = new ArrayList<>(sentences);
         this.more = new Button(size + " more (Space)");
         attempts = new AttemptsPanel(owner);
-        counter.getStyleClass().add("history-meta");
-        counter.setPadding(new Insets(8));
-        hint.getStyleClass().add("history-meta");
-
-        know.setFocusTraversable(false);
-        skip.setFocusTraversable(false);
-        know.setOnAction(e -> know());
-        skip.setOnAction(e -> skip());
-        more.setOnAction(e -> startBatch());
-        homeButton.setOnAction(e -> home.run());
-        cardHome.setFocusTraversable(false);
-        cardHome.setOnAction(e -> {
+        frame = new CardFrame(() -> {
             attempts.stopAll();
             home.run();
-        });
-        back.setFocusTraversable(false);
-        back.setOnAction(e -> back());
-        endBack.setFocusTraversable(false);
-        endBack.setOnAction(e -> back());
-        attempts.addToButtonRow(know);
-        attempts.addToButtonRow(skip);
-        listen.setFocusTraversable(false);
+        }, this::back, this::skip, this::remove);
+        hint.getStyleClass().add("history-meta");
+
+        know.setOnAction(e -> know());
+        more.setOnAction(e -> startBatch());
         listen.setOnAction(e -> listen());
-        attempts.addToButtonRow(listen);
-        remove.setFocusTraversable(false);
-        remove.setOnAction(e -> remove());
-        attempts.addToButtonRow(remove);
-        attempts.addToButtonRow(back);
-        attempts.addToButtonRow(cardHome);
+        for (var b : List.of(know, more, listen)) {
+            b.setFocusTraversable(false);
+        }
         for (var n : List.of(notice, endNotice)) {
             n.getStyleClass().add("history-meta");
             n.setManaged(false);
@@ -111,15 +87,18 @@ final class LearnPane extends VBox {
             }
             updateKnow();
         });
-        card.getChildren().addAll(english, pl, say, watch, attempts, hint, notice);
+        card.getChildren().addAll(english, pl, say, watch, new HBox(8, know, listen), attempts, hint, notice);
 
-        content.setPadding(new Insets(24));
-        content.setSpacing(16);
-        VBox.setVgrow(content, Priority.ALWAYS);
+        var column = frame.content();
         for (var t : List.of(english, pl, say, watch, endText)) {
-            t.wrappingWidthProperty().bind(content.widthProperty().subtract(52));
+            t.wrappingWidthProperty().bind(column.widthProperty().subtract(4));
         }
-        getChildren().addAll(counter, content);
+        for (var box : List.of(card, endBox)) {
+            box.setMinWidth(0);
+        }
+        setMinWidth(0);
+        VBox.setVgrow(frame, Priority.ALWAYS);
+        getChildren().add(frame);
         startBatch();
     }
 
@@ -130,11 +109,11 @@ final class LearnPane extends VBox {
         return t;
     }
 
-    /** Handles R, P, F, L, Delete, Space, N and Left; true when the key was used. Esc belongs to the window. */
+    /** Handles R, P, F, L, Delete, Space, Enter, N, Left and Right; true when the key was used. Esc belongs to the window. */
     boolean onKey(KeyEvent e) {
         var code = e.getCode();
         if (current == null) {
-            if (code == KeyCode.SPACE && remaining > 0) {
+            if ((code == KeyCode.SPACE || code == KeyCode.ENTER) && remaining > 0) {
                 startBatch();
                 return true;
             }
@@ -150,9 +129,9 @@ final class LearnPane extends VBox {
             case F -> attempts.playFirst();
             case L -> listen();
             case DELETE -> remove();
-            case N -> skip();
+            case N, RIGHT -> skip();
             case LEFT -> back();
-            case SPACE -> know();
+            case SPACE, ENTER -> know();
             default -> {
                 return false;
             }
@@ -198,21 +177,24 @@ final class LearnPane extends VBox {
         }
         current = batch.get(index);
         attempts.setSentence(current);
-        counter.setText("new " + (index + 1) + " of " + batch.size() + " · new");
+        frame.setTitle("Learn · card " + (index + 1) + " of " + batch.size());
         english.setText(current.english());
         pl.setText(current.pl());
         say.setText(current.say());
         say.setManaged(!current.say().isBlank());
         watch.setText(current.watchPlain());
         watch.setManaged(!current.watchPlain().isBlank());
-        content.getChildren().setAll(card);
+        frame.nextButton().setDisable(false);
+        frame.removeButton().setDisable(false);
+        frame.setPrimary(know);
+        frame.setContent(card);
         updateKnow();
     }
 
     private void updateKnow() {
         boolean ready = current != null && attempts.hasAttempts();
         know.setDisable(!ready);
-        back.setDisable(index == 0);
+        frame.backButton().setDisable(index == 0);
         hint.setVisible(!ready);
         hint.setManaged(!ready);
     }
@@ -297,21 +279,21 @@ final class LearnPane extends VBox {
     }
 
     private void showEnd() {
-        counter.setText("");
+        frame.setTitle("Learn");
         endText.setText(batch.isEmpty()
                 ? "Nothing new to learn."
                 : "Learned " + learnedCount + ". Review starts tomorrow.");
-        var end = new VBox(16, endText);
+        endBox.getChildren().setAll(endText);
         if (!endNotice.getText().isEmpty()) {
-            end.getChildren().add(endNotice);
+            endBox.getChildren().add(endNotice);
         }
         if (remaining > 0) {
-            end.getChildren().add(more);
+            endBox.getChildren().add(more);
         }
-        if (!batch.isEmpty()) {
-            end.getChildren().add(endBack);
-        }
-        end.getChildren().add(homeButton);
-        content.getChildren().setAll(end, new Region());
+        frame.backButton().setDisable(batch.isEmpty());
+        frame.nextButton().setDisable(true);
+        frame.removeButton().setDisable(true);
+        frame.setPrimary(remaining > 0 ? more : null);
+        frame.setContent(endBox);
     }
 }

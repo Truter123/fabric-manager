@@ -77,7 +77,7 @@ public final class AgentsPanel extends BorderPane {
         var input = new ArrayList<RowInput>();
         for (var agent : agents) {
             var tab = byAgent.get(agent);
-            input.add(new RowInput(agent, tab, tab.isSelected()));
+            input.add(new RowInput(agent, tab, tabs.getSelectionModel().getSelectedItem() == tab));
         }
         if (input.equals(lastInput)) {
             return;
@@ -130,7 +130,7 @@ public final class AgentsPanel extends BorderPane {
             box.getChildren().add(ctx);
         }
         box.getStyleClass().add("agent-row");
-        if (tab.isSelected()) {
+        if (tabs.getSelectionModel().getSelectedItem() == tab) {
             box.getStyleClass().add("agent-row-selected");
         }
         box.setOnMouseClicked(e -> {

@@ -1,5 +1,6 @@
 package dev.kamil.fabric.session;
 
+import dev.kamil.fabric.Dialogs;
 import dev.kamil.fabric.terminal.TerminalTab;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -54,6 +55,7 @@ public final class OverviewGrid extends StackPane {
     private static final class Entry {
         Card card;
         VBox box;
+        Label badge;
         final List<Label> labels = new ArrayList<>();
     }
 
@@ -68,10 +70,23 @@ public final class OverviewGrid extends StackPane {
         var scroll = new ScrollPane(grid);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("overview-scroll");
-        getChildren().addAll(scroll, empty);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        var title = new Label("Overview");
+        title.getStyleClass().add("overview-title");
+        var header = new HBox(12, title, Dialogs.keyHint("Arrows move   Enter open   1–9 jump   Esc close"));
+        header.getStyleClass().add("overview-header");
+        header.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        getChildren().addAll(new VBox(header, scroll), empty);
         setVisible(false);
         timer.setCycleCount(Animation.INDEFINITE);
         addEventFilter(KeyEvent.KEY_PRESSED, this::onKey);
+        // A session picked elsewhere (the sidebar, Ctrl+Tab) moves the keyboard focus to its terminal beneath this
+        // overlay, where Esc would reach the terminal instead of closing the overview.
+        tabs.getSelectionModel().selectedItemProperty().addListener((o, was, now) -> {
+            if (isOpen()) {
+                close();
+            }
+        });
         // A click on the empty backdrop closes it.
         setOnMouseClicked(e -> {
             if (e.getTarget() == this || e.getTarget() == grid) {
@@ -134,6 +149,7 @@ public final class OverviewGrid extends StackPane {
         entries.keySet().removeIf(t -> !live.contains(t));
         var desired = new ArrayList<Node>();
         cardNodes.clear();
+        int position = 0;
         for (var agent : AgentsPanel.sorted(agents)) {
             var tab = byAgent.get(agent);
             var next = card(agent, tab, trim(tab.screenLines(), PREVIEW_LINES));
@@ -145,6 +161,7 @@ public final class OverviewGrid extends StackPane {
                 updateLines(entry, next.lines());
                 entry.card = next;
             }
+            setBadge(entry.badge, position++);
             cardNodes.add(entry.box);
             desired.add(entry.box);
         }
@@ -195,6 +212,18 @@ public final class OverviewGrid extends StackPane {
         }
     }
 
+    /** The digit that jumps to the card at {@code index}: "1".."9" for the first nine, blank after that. */
+    static String badgeText(int index) {
+        return index >= 0 && index < 9 ? String.valueOf(index + 1) : "";
+    }
+
+    private static void setBadge(Label badge, int index) {
+        var text = badgeText(index);
+        badge.setText(text);
+        badge.setVisible(!text.isEmpty());
+        badge.setManaged(!text.isEmpty());
+    }
+
     private Entry build(Card card, TerminalTab tab) {
         var name = new Label(card.name());
         name.getStyleClass().add("overview-name");
@@ -203,7 +232,9 @@ public final class OverviewGrid extends StackPane {
         }
         var spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        var top = new HBox(8, new Circle(5, card.dot()), name, spacer);
+        var badge = new Label();
+        badge.getStyleClass().add("overview-badge");
+        var top = new HBox(8, badge, new Circle(5, card.dot()), name, spacer);
         top.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         if (card.pinned()) {
             top.getChildren().add(new Label("📌"));
@@ -231,6 +262,7 @@ public final class OverviewGrid extends StackPane {
         box.setUserData(tab);
         var entry = new Entry();
         entry.box = box;
+        entry.badge = badge;
         entry.card = card;
         updateLines(entry, card.lines());
         return entry;

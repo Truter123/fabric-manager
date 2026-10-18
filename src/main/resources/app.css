@@ -6,7 +6,8 @@
     -fm-hover: #262220;
     -fm-border: #2e2a28;
     -fm-text: #e8e4e1;
-    -fm-muted: #8a8380;
+    /* 5.22:1 on the hover/selected background #262220 (#8a8380 gave 4.23:1, below WCAG AA 4.5:1). */
+    -fm-muted: #9a9390;
     -fm-accent: #ff7a3d;
     -fm-on-accent: #1a0f0a;
     -fm-green: #8fbf7f;
@@ -21,9 +22,33 @@
     -fx-faint-focus-color: transparent;
     -fx-text-base-color: -fm-text;
     -fx-text-background-color: -fm-text;
+    /* Modena paints selected rows orange (focused) or light grey (unfocused); both clash with the light text. */
+    -fx-selection-bar: #4a2f22;
+    -fx-selection-bar-non-focused: #332d2a;
+    -fx-selection-bar-text: -fm-text;
     -fx-font-family: "System";
     -fx-font-size: 13px;
 }
+
+/* Modena derives the prompt text from the inner background, which leaves it near-black on this theme. */
+.text-input { -fx-prompt-text-fill: -fm-muted; -fx-border-color: -fm-border; -fx-border-radius: 4; -fx-background-radius: 4; }
+.text-input:focused { -fx-border-color: -fm-accent; }
+
+/* Status text: muted wherever it is used, not only inside the History window (.history .label would win there, so
+   the scoped rule below stays). */
+.history-meta { -fx-text-fill: -fm-muted; }
+
+/* A selected cell gets a 3 px accent bar on its left edge; the bar's width is reserved on every cell so selecting
+   a row never moves it. The background colours stay as they are (SelectionContrastE2ETest measures the text on
+   them). Table rows draw the bar as a background layer instead: a border would shift the cells off their headers. */
+.list-cell:filled, .tree-cell:filled { -fx-border-color: transparent; -fx-border-width: 0 0 0 3; }
+.list-cell:filled:selected, .tree-cell:filled:selected { -fx-border-color: transparent transparent transparent -fm-accent; }
+.table-row-cell:filled:selected {
+    -fx-background-color: -fx-table-cell-border-color, -fm-accent, -fx-background;
+    -fx-background-insets: 0, 0 0 1 0, 0 0 1 3;
+}
+/* Lists, trees and tables reserve their focus ring so focusing one never resizes it (the :focused rule is at the end). */
+.list-view, .tree-view, .table-view { -fx-border-color: transparent; -fx-border-width: 1; }
 
 .button, .combo-box {
     -fx-background-color: -fm-raised;
@@ -39,12 +64,22 @@
 .button:focused, .combo-box:focused { -fx-border-color: -fm-accent; }
 .button:default { -fx-background-color: -fm-accent; -fx-border-color: -fm-accent; -fx-text-fill: -fm-on-accent; }
 .button:default:hover { -fx-opacity: 0.9; }
+.button.primary { -fx-background-color: -fm-accent; -fx-border-color: -fm-accent; -fx-text-fill: -fm-on-accent; }
+.button.primary:hover { -fx-opacity: 0.9; }
+/* An accent border on an accent fill shows no focus: the focused primary button gets a light ring instead. */
+.button:default:focused, .button.primary:focused, .sidebar-actions .action-accent:focused {
+    -fx-border-color: -fm-text;
+    -fx-background-color: -fm-text, -fm-accent;
+    -fx-background-insets: 0, 2;
+    -fx-background-radius: 6, 4;
+}
+.key-hint { -fx-text-fill: -fm-muted; -fx-font-size: 0.85em; -fx-padding: 4 8 4 8; }
 .button:disabled { -fx-opacity: 0.4; }
 .combo-box { -fx-padding: 1 4 1 4; }
 .combo-box .arrow { -fx-background-color: -fm-muted; }
 
 /* Dropdown: the button cell and the popup list need their own text colour. */
-.combo-box .list-cell { -fx-background-color: transparent; -fx-text-fill: -fm-text; }
+.combo-box .list-cell { -fx-background-color: transparent; -fx-text-fill: -fm-text; -fx-border-width: 0; }
 .combo-box-popup .list-view {
     -fx-background-color: -fm-raised;
     -fx-background-radius: 6;
@@ -58,6 +93,7 @@
     -fx-background-radius: 4;
     -fx-text-fill: -fm-text;
     -fx-padding: 5 10 5 10;
+    -fx-border-width: 0;
 }
 .combo-box-popup .list-view .list-cell:filled:hover { -fx-background-color: -fm-hover; }
 .combo-box-popup .list-view .list-cell:filled:selected { -fx-background-color: -fm-accent; -fx-text-fill: -fm-on-accent; }
@@ -103,12 +139,12 @@
 .sidebar .sidebar-add:hover { -fx-background-color: -fm-hover; -fx-text-fill: -fm-accent; }
 .sidebar .session-row {
     -fx-background-radius: 6; -fx-border-radius: 6; -fx-padding: 5 8 5 8;
-    -fx-border-color: transparent; -fx-cursor: hand;
+    -fx-border-color: transparent; -fx-border-width: 0 0 0 3; -fx-cursor: hand;
 }
 .sidebar .session-row:hover { -fx-background-color: -fm-raised; }
 .sidebar .session-row-selected, .sidebar .session-row-selected:hover {
     -fx-background-color: -fm-hover; -fx-border-color: transparent transparent transparent -fm-accent;
-    -fx-border-width: 0 0 0 2;
+    -fx-border-width: 0 0 0 3;
 }
 .sidebar .session-name { -fx-text-fill: -fm-text; }
 .sidebar .session-branch { -fx-text-fill: -fm-muted; -fx-font-size: 11px; }
@@ -148,7 +184,7 @@
     -fx-padding: 5 8 5 8;
 }
 .picker .list-view .list-cell:filled:hover { -fx-background-color: -fm-raised; }
-.picker .list-view .list-cell:filled:selected { -fx-background-color: -fm-hover; }
+.picker .list-view .list-cell:filled:selected { -fx-background-color: -fm-hover; -fx-text-fill: -fm-text; }
 .picker .project-name { -fx-font-weight: bold; -fx-text-fill: -fm-text; }
 .picker .project-path { -fx-text-fill: -fm-muted; -fx-font-size: 11px; }
 .picker .text-field {
@@ -181,7 +217,8 @@
 .history .table-view .column-header, .history .table-view .filler { -fx-background-color: -fm-panel; }
 .history .table-view .column-header .label { -fx-text-fill: -fm-muted; }
 .history .table-row-cell, .history .table-cell { -fx-text-fill: -fm-text; -fx-background-color: transparent; }
-.history .table-row-cell:selected, .history .list-cell:selected { -fx-background-color: -fm-hover; }
+.history .list-cell:selected { -fx-background-color: -fm-hover; }
+.history .table-row-cell:selected { -fx-background-color: -fm-accent, -fm-hover; -fx-background-insets: 0, 0 0 0 3; }
 .history .label { -fx-text-fill: -fm-text; }
 .history .text-field { -fx-background-color: -fm-panel; -fx-text-fill: -fm-text; -fx-prompt-text-fill: -fm-muted; -fx-border-color: -fm-border; -fx-border-radius: 6; -fx-background-radius: 6; }
 .history .text-field:focused { -fx-border-color: -fm-accent; }
@@ -197,6 +234,10 @@
 .history .chip-head, .history .chip-current, .history .chip-local, .history .chip-remote, .history .chip-tag { -fx-font-weight: normal; }
 .history .graph-cell { -fx-padding: 0 6 0 0; }
 .history .tree-view, .history .tree-cell { -fx-background-color: -fm-bg; -fx-control-inner-background: -fm-bg; -fx-text-fill: -fm-text; }
+/* Literal colours on purpose: a looked-up colour (-fm-*, -fx-text-background-color) on a freshly created tree cell
+   sometimes resolves to a String and logs "ClassCastException: String cannot be cast to Paint" (JavaFX CSS quirk). */
+.history .tree-cell > .tree-disclosure-node > .arrow { -fx-background-color: #9a9390; }
+.history .tree-cell:selected > .tree-disclosure-node > .arrow { -fx-background-color: #e8e4e1; }
 .history .tree-cell:selected { -fx-background-color: -fm-hover; }
 .history .hist-remote .label { -fx-text-fill: -fm-muted; }
 .history .hist-current .label { -fx-font-weight: bold; }
@@ -225,6 +266,7 @@
 .history .diff-view .diff-hunk { -fx-text-fill: -fm-accent; }
 .history .diff-view .diff-header { -fx-text-fill: -fm-muted; }
 
+.inline-error { -fx-text-fill: -fm-red; }
 .picker .clone-error { -fx-text-fill: #d96b75; }
 .picker .clone-log, .picker .clone-log .content {
     -fx-control-inner-background: -fm-panel;
@@ -262,11 +304,25 @@
 .context-menu .separator .line { -fx-border-color: -fm-border transparent transparent transparent; }
 
 
+.task-input {
+    -fx-background-color: -fm-raised;
+    -fx-background-radius: 6;
+    -fx-border-color: -fm-border;
+    -fx-border-radius: 6;
+    -fx-text-fill: -fm-text;
+    -fx-prompt-text-fill: -fm-muted;
+    -fx-font-size: 15px;
+    -fx-padding: 8 10 8 10;
+}
+.task-input:focused { -fx-border-color: -fm-accent; }
 .task-header { -fx-font-weight: bold; -fx-text-fill: -fm-muted; }
 .task-header-overdue { -fx-text-fill: #d96b75; }
 .task-date { -fx-text-fill: -fm-muted; -fx-font-size: 11px; }
 .task-date-overdue { -fx-text-fill: #d96b75; }
 .task-done { -fx-opacity: 0.6; }
+/* Muted and status colours are tuned for the dark panel; on a selected row everything reads in the main text colour. */
+.list-cell:filled:selected .label, .tree-cell:filled:selected .label,
+.table-row-cell:filled:selected .label, .table-row-cell:filled:selected .table-cell { -fx-text-fill: -fm-text; }
 
 /* Shown in the tab area when no tab is open. */
 .empty-hint { -fx-font-family: monospace; -fx-font-size: 15px; -fx-opacity: 0.6; }
@@ -287,10 +343,14 @@
 .agents-panel { -fx-background-color: -fm-panel; -fx-border-color: -fm-border; -fx-border-width: 0 0 0 1; }
 .agents-panel .scroll-pane, .agents-panel .scroll-pane > .viewport { -fx-background-color: transparent; -fx-padding: 0; }
 .agents-panel .agents-header { -fx-text-fill: -fm-text; -fx-font-weight: bold; -fx-font-size: 13px; }
-.agents-panel .agent-row { -fx-background-radius: 6; -fx-padding: 6 8 6 8; -fx-cursor: hand; }
+.agents-panel .agent-row {
+    -fx-background-radius: 6; -fx-padding: 6 8 6 8; -fx-border-color: transparent; -fx-border-width: 0 0 0 3;
+    -fx-cursor: hand;
+}
 .agents-panel .agent-row:hover { -fx-background-color: -fm-raised; }
 .agents-panel .agent-row-selected, .agents-panel .agent-row-selected:hover {
     -fx-background-color: -fm-hover; -fx-border-color: transparent transparent transparent -fm-accent;
+    -fx-border-width: 0 0 0 3;
 }
 .agents-panel .agent-name { -fx-text-fill: -fm-text; }
 .agents-panel .agent-unseen { -fx-font-weight: bold; }
@@ -342,6 +402,10 @@
 
 .overview { -fx-background-color: rgba(20, 18, 17, 0.94); }
 .overview-scroll, .overview-scroll > .viewport, .overview-grid { -fx-background-color: transparent; }
+.overview-header { -fx-padding: 16 24 0 24; }
+.overview-title { -fx-text-fill: -fm-text; -fx-font-size: 18px; -fx-font-weight: bold; }
+.overview-badge { -fx-text-fill: -fm-on-accent; -fx-background-color: -fm-accent; -fx-background-radius: 4;
+    -fx-font-size: 11px; -fx-font-weight: bold; -fx-padding: 0 5 0 5; }
 .overview-empty { -fx-text-fill: -fm-muted; -fx-font-size: 16px; }
 .overview-card { -fx-background-color: -fm-raised; -fx-background-radius: 8; -fx-border-radius: 8;
     -fx-border-color: -fm-border; -fx-padding: 10 12 10 12; -fx-cursor: hand; }
@@ -388,3 +452,21 @@
 .sentence-card .sentence-muted, .sentence-muted { -fx-text-fill: -fm-muted; }
 .sentence-removed { -fx-background-color: transparent; -fx-border-color: -fm-border; -fx-border-radius: 6; -fx-padding: 6 12 6 12; }
 .sentence-removed .label { -fx-text-fill: -fm-muted; }
+
+/* Shared "Deleted X, Undo" strip. */
+.undo-bar {
+    -fx-background-color: -fm-raised;
+    -fx-border-color: -fm-border;
+    -fx-padding: 4 10 4 10;
+}
+
+.keysheet { -fx-background-color: -fm-bg; }
+.keysheet-scroll, .keysheet-scroll > .viewport { -fx-background-color: transparent; -fx-background-insets: 0; }
+.keysheet-title { -fx-text-fill: -fm-text; -fx-font-size: 18px; -fx-font-weight: bold; }
+.keysheet-key { -fx-text-fill: -fm-accent; -fx-font-family: monospace; }
+.keysheet-what { -fx-text-fill: -fm-text; }
+.keysheet-section { -fx-text-fill: -fm-muted; -fx-font-weight: bold; }
+
+/* Keyboard focus on a list, tree or table: an accent ring in the border reserved near the top of this file. Last on
+   purpose: it must win over the scoped borders (.picker .list-view, .combo-box-popup .list-view). */
+.list-view:focused, .tree-view:focused, .table-view:focused { -fx-border-color: -fm-accent; }

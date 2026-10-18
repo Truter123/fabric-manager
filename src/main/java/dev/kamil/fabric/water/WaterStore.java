@@ -19,7 +19,7 @@ public final class WaterStore {
 
     public record Config(int ml, int everyMin, int goalMl, boolean notification, boolean popup,
             boolean enabled) {
-        public static final Config DEFAULT = new Config(250, 60, 2000, true, true, true);
+        public static final Config DEFAULT = new Config(250, 60, 2000, true, true, false);
     }
 
     public record Entry(LocalDate date, String time, int ml, String status) {
@@ -68,7 +68,7 @@ public final class WaterStore {
         int goal = Config.DEFAULT.goalMl();
         boolean notification = true;
         boolean popup = true;
-        boolean enabled = true;
+        boolean enabled = Config.DEFAULT.enabled();
         for (var line : Files.readAllLines(configFile(), StandardCharsets.UTF_8)) {
             int eq = line.indexOf('=');
             if (eq < 0) {

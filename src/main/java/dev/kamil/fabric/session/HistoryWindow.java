@@ -276,6 +276,7 @@ public final class HistoryWindow {
         SplitPane.setResizableWithParent(left, false);
 
         var root = new BorderPane(split);
+        root.setBottom(Dialogs.keyHint("Ctrl+F filter   F5 refresh   Double-click worktree open session   Esc close"));
         root.getStyleClass().addAll("root", "history");
         return root;
     }

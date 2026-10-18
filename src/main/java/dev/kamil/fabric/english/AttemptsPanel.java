@@ -50,11 +50,6 @@ final class AttemptsPanel extends VBox {
         return record;
     }
 
-    /** Adds a node to the right of First (F). */
-    void addToButtonRow(javafx.scene.Node node) {
-        buttons.getChildren().add(node);
-    }
-
     /** Called after a recording was stopped by {@link #toggleRecording()}; the argument says if an attempt was saved. */
     void setOnStopped(Consumer<Boolean> onStopped) {
         this.onStopped = onStopped;

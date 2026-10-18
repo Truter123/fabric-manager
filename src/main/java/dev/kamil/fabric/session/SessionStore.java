@@ -104,6 +104,26 @@ public final class SessionStore {
         }
     }
 
+    /** Puts a deleted session back as it was; only unpinned sessions are ever deleted. */
+    synchronized void restore(SavedSession session) {
+        try (var con = db.connect();
+                var ps = con.prepareStatement("MERGE INTO session (id, project_path, tool_name, tool_command, title,"
+                        + " started_at, ended_at, last_status, account) KEY(id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+            ps.setString(1, session.id());
+            ps.setString(2, session.project().toString());
+            ps.setString(3, session.tool().name());
+            ps.setString(4, session.tool().command());
+            ps.setString(5, session.title());
+            ps.setTimestamp(6, Timestamp.from(session.startedAt()));
+            ps.setTimestamp(7, session.endedAt() == null ? null : Timestamp.from(session.endedAt()));
+            ps.setString(8, session.lastStatus());
+            ps.setString(9, session.account().name());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Cannot restore session: " + e.getMessage(), e);
+        }
+    }
+
     List<SavedSession> recent(int limit) {
         return query("", null, limit);
     }

@@ -66,7 +66,12 @@ public final class SentenceFile {
     }
 
     public static String format(List<Sentence> sentences) {
-        var out = new StringBuilder(TITLE).append("\n");
+        return format(TITLE, sentences);
+    }
+
+    /** Like {@link #format(List)} with {@code title} (a whole "# …" line) as the first line. */
+    static String format(String title, List<Sentence> sentences) {
+        var out = new StringBuilder(title).append("\n");
         for (var s : sentences) {
             out.append("\n### ").append(s.date()).append('\n')
                     .append("English: ").append(s.english()).append('\n')
@@ -81,7 +86,11 @@ public final class SentenceFile {
         return parse(Files.readString(file, StandardCharsets.UTF_8));
     }
 
-    /** Backs the existing file up to {@code <name>.bak}, then replaces it atomically. */
+    /**
+     * Backs the existing file up to {@code <name>.bak}, then replaces it atomically. The first line names the list
+     * after the file: {@code Work.md} → "# Work", {@code Work.removed.md} → "# Work (removed)"; the list file
+     * {@code my-list.md} is titled "# My sentences".
+     */
     public static void save(Path file, List<Sentence> sentences) throws IOException {
         var dir = file.toAbsolutePath().getParent();
         Files.createDirectories(dir);
@@ -90,10 +99,19 @@ public final class SentenceFile {
         }
         var tmp = Files.createTempFile(dir, file.getFileName().toString(), ".tmp");
         try {
-            Files.writeString(tmp, format(sentences), StandardCharsets.UTF_8);
+            Files.writeString(tmp, format(titleOf(file), sentences), StandardCharsets.UTF_8);
             Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(tmp);
         }
+    }
+
+    static String titleOf(Path file) {
+        var name = file.getFileName().toString();
+        name = name.endsWith(".md") ? name.substring(0, name.length() - 3) : name;
+        boolean removed = name.endsWith(".removed");
+        var base = removed ? name.substring(0, name.length() - ".removed".length()) : name;
+        var title = base.equals(SentenceList.NAME) ? "My sentences" : base;
+        return "# " + title + (removed ? " (removed)" : "");
     }
 }

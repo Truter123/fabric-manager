@@ -28,6 +28,7 @@ import javafx.util.Duration;
 public final class TranscriptSearchWindow {
 
     private static final int LIMIT = 50;
+    private static final String IDLE = "Type to search all sessions.";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final Stage stage = new Stage(StageStyle.UNDECORATED);
@@ -35,6 +36,7 @@ public final class TranscriptSearchWindow {
     private final Consumer<TranscriptSearch.Hit> onChoose;
     private final TextField query = new TextField();
     private final ListView<TranscriptSearch.Hit> list = new ListView<>();
+    private final Label placeholder = new Label(IDLE);
     private final PauseTransition debounce = new PauseTransition(Duration.millis(300));
     private long generation;
 
@@ -47,7 +49,7 @@ public final class TranscriptSearchWindow {
         query.textProperty().addListener((o, a, b) -> debounce.playFromStart());
         debounce.setOnFinished(e -> search());
         list.setCellFactory(v -> new HitCell());
-        list.setPlaceholder(new Label("Type to search all sessions."));
+        list.setPlaceholder(placeholder);
         list.setPrefHeight(360);
         list.setOnMouseClicked(e -> {
             if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 2) {
@@ -134,11 +136,29 @@ public final class TranscriptSearchWindow {
     private void search() {
         var text = query.getText() == null ? "" : query.getText();
         long mine = ++generation;
+        list.getItems().clear();
+        if (text.isBlank()) {
+            placeholder.setText(IDLE);
+            return;
+        }
+        placeholder.setText("Searching…");
         Thread.ofVirtual().start(() -> {
-            var hits = TranscriptSearch.search(claudeHomes, text, LIMIT);
+            List<TranscriptSearch.Hit> hits;
+            try {
+                hits = TranscriptSearch.search(claudeHomes, text, LIMIT);
+            } catch (RuntimeException e) {
+                // Never leave "Searching…" on screen.
+                Platform.runLater(() -> {
+                    if (mine == generation) {
+                        placeholder.setText("Search failed: " + e.getMessage());
+                    }
+                });
+                return;
+            }
             Platform.runLater(() -> {
                 if (mine == generation) {
                     list.getItems().setAll(hits);
+                    placeholder.setText(hits.isEmpty() ? "No results for \"" + text.strip() + "\"" : IDLE);
                     if (!hits.isEmpty()) {
                         list.getSelectionModel().select(0);
                     }

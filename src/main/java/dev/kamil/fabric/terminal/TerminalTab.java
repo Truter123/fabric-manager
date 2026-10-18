@@ -457,13 +457,37 @@ public final class TerminalTab extends Tab {
         return info.commandLine().or(info::command).map(c -> c.contains(word)).orElse(false);
     }
 
-    /** Asks first when the tool is still running, so one stray click does not end a session. */
+    /**
+     * True when the tool runs in this tab, or a shell has a child process (a dev server, vim, ssh): the tab's own
+     * shell or the split one.
+     */
+    public boolean busy() {
+        return status() == Status.TOOL_RUNNING || (tool.isShell() && shellBusy(connector))
+                || (second != null && shellBusy(second.connector()));
+    }
+
+    private static boolean shellBusy(PtyTtyConnector shell) {
+        try {
+            return shell.isConnected() && ProcessHandle.of(shell.pid()).filter(TerminalTab::hasChildren).isPresent();
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** True while the process has a live child. */
+    static boolean hasChildren(ProcessHandle process) {
+        return process.children().findAny().isPresent();
+    }
+
+    /** Asks first when something is still running, so one stray click does not end it. */
     boolean confirmClose() {
-        if (status() != Status.TOOL_RUNNING || getTabPane() == null) {
+        if (getTabPane() == null || !busy()) {
             return true;
         }
+        var what = status() == Status.TOOL_RUNNING ? tool.name() + " is still running in this tab."
+                : "A program is still running in this shell.";
         return Dialogs.confirm(getTabPane().getScene().getWindow(), "Close " + displayName() + "?",
-                tool.name() + " is still running in this tab. Closing the tab ends it.", "Close tab");
+                what + " Closing the tab ends it.", "Close tab");
     }
 
     /** Closes the tab like its close button does, including the question. */

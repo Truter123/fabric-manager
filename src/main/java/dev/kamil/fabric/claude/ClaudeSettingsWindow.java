@@ -109,6 +109,12 @@ public final class ClaudeSettingsWindow {
         created.reload();
     }
 
+    /** The open window's stage for {@code project}, or null; a seam for tests. */
+    static Stage openStage(Path project) {
+        var open = OPEN.get(project.toAbsolutePath().normalize());
+        return open == null ? null : open.window;
+    }
+
     private ClaudeSettingsWindow(Window owner, Path project, Account account) {
         this.project = project;
         this.account = account;
@@ -179,6 +185,7 @@ public final class ClaudeSettingsWindow {
         });
         hint.getStyleClass().add("history-meta");
         save.setDisable(true);
+        save.getStyleClass().add("primary");
         save.setTooltip(new Tooltip("Save (Ctrl+S)"));
         save.setOnAction(e -> save());
         var refresh = new Button("⟳");
@@ -200,7 +207,9 @@ public final class ClaudeSettingsWindow {
         dirtyLabel.getStyleClass().add("history-meta");
         var statusBar = new HBox(12, status, dirtyLabel);
         statusBar.setPadding(new Insets(4, 8, 4, 8));
-        var rootPane = new BorderPane(split, null, null, statusBar, null);
+        var footer = new VBox(statusBar,
+                Dialogs.keyHint("Ctrl+S save   F5 reload   Ctrl+F filter   Ctrl+N new   Esc close"));
+        var rootPane = new BorderPane(split, null, null, footer, null);
         rootPane.getStyleClass().addAll("history", "claude-settings");
         return rootPane;
     }

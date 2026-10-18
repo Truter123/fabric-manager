@@ -15,7 +15,7 @@ repositories {
     mavenCentral()
 }
 
-val javafxVersion = "25.0.4"
+val javafxVersion = "27"
 val javafxPlatform = "linux"
 
 dependencies {
@@ -35,6 +35,12 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // JavaFX 27 has a headless glass platform: the JavaFX tests run without opening a window on the desktop.
+    // ./gradlew test -PshowWindows runs them on the real display instead, for debugging.
+    if (!project.hasProperty("showWindows")) {
+        systemProperty("glass.platform", "Headless")
+        systemProperty("prism.order", "sw")
+    }
 }
 
 application {

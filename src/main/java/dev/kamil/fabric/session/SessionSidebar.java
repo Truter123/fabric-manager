@@ -268,7 +268,13 @@ public final class SessionSidebar extends BorderPane {
     }
 
     /** One command shown as a sidebar button; the shortcut goes in its tooltip. */
-    public record Action(Group group, String icon, String label, String keys, Runnable run) {
+    public record Action(Group group, String icon, String label, String keys, Runnable run,
+            javafx.beans.value.ObservableBooleanValue enabled) {
+
+        /** An action that is always available. */
+        public Action(Group group, String icon, String label, String keys, Runnable run) {
+            this(group, icon, label, keys, run, null);
+        }
     }
 
     /** Actions by group in {@link Group} order, keeping the given order inside a group; empty groups are omitted. */
@@ -360,10 +366,13 @@ public final class SessionSidebar extends BorderPane {
     }
 
     /** A button for one action; {@code compact} adds the icon before the label in a flat style. */
-    private static Button actionButton(Action action, boolean compact) {
+    static Button actionButton(Action action, boolean compact) {
         var button = new Button(compact ? action.icon() + "  " + action.label() : action.label());
         button.setTooltip(new Tooltip(action.label() + "  " + action.keys()));
         button.setOnAction(e -> action.run().run());
+        if (action.enabled() != null) {
+            button.disableProperty().bind(javafx.beans.binding.Bindings.not(action.enabled()));
+        }
         if (compact) {
             button.getStyleClass().add("action-flat");
         }

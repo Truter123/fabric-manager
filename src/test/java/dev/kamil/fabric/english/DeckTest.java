@@ -232,6 +232,68 @@ class DeckTest {
     }
 
     @Test
+    void skipLeavesTheProgressUnchangedAndMovesToTheNextCard() {
+        var deck = new Deck(List.of(s("A"), s("B")),
+                map(new CardProgress("A", 3, TODAY), new CardProgress("B", 3, TODAY)), TODAY);
+        var first = deck.next();
+        deck.skip();
+        assertEquals(new CardProgress(first.english(), 3, TODAY), deck.progressOf(first.english()));
+        assertEquals(false, first.equals(deck.next()));
+        assertEquals(0, deck.done());
+        assertEquals(0, deck.good());
+        assertEquals(1, deck.position());
+        assertEquals(true, deck.canBack());
+        deck.skip();
+        assertNull(deck.next());
+        assertEquals(2, deck.position());
+        deck.skip();
+        assertEquals(2, deck.position());
+    }
+
+    @Test
+    void backAfterASkipReturnsTheCardToTheFrontAndRestoresThePosition() {
+        var deck = new Deck(List.of(s("A"), s("B")),
+                map(new CardProgress("A", 3, TODAY), new CardProgress("B", 3, TODAY)), TODAY);
+        var first = deck.next();
+        deck.skip();
+        var second = deck.next();
+        assertEquals(true, deck.back());
+        assertEquals(first, deck.next());
+        assertEquals(0, deck.position());
+        assertEquals(new CardProgress(first.english(), 3, TODAY), deck.progressOf(first.english()));
+        assertEquals(false, deck.canBack());
+        deck.grade(Deck.Grade.GOOD);
+        assertEquals(second, deck.next());
+    }
+
+    @Test
+    void positionCountsGradedAndSkippedCards() {
+        var deck = new Deck(List.of(s("A"), s("B"), s("C")),
+                map(new CardProgress("A", 1, TODAY.minusDays(3)), new CardProgress("B", 1, TODAY.minusDays(2)),
+                        new CardProgress("C", 1, TODAY.minusDays(1))), TODAY);
+        assertEquals(0, deck.position());
+        deck.grade(Deck.Grade.GOOD);
+        assertEquals(1, deck.position());
+        deck.skip();
+        assertEquals(2, deck.position());
+        assertEquals(1, deck.done());
+        assertEquals(1, deck.skipped());
+        deck.back();
+        assertEquals(1, deck.position());
+        assertEquals(0, deck.skipped());
+        deck.back();
+        assertEquals(0, deck.position());
+    }
+
+    @Test
+    void aSkippedCardIsNotOfferedAgainByExtend() {
+        var deck = new Deck(List.of(s("A")), map(new CardProgress("A", 1, TODAY)), TODAY);
+        deck.skip();
+        assertEquals(0, deck.extend(5));
+        assertEquals(1, deck.dueCount());
+    }
+
+    @Test
     void discardedCardsAreNotInTheHistory() {
         var deck = new Deck(List.of(s("A"), s("B")),
                 map(new CardProgress("A", 1, TODAY), new CardProgress("B", 1, TODAY)), TODAY);

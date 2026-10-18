@@ -86,7 +86,7 @@ public final class Notifier {
             return false;
         }
         var kind = activity == Activity.DONE ? FINISHED : NEEDS_INPUT;
-        var showToast = settings.getBoolean(DESKTOP, true);
+        var showToast = settings.getBoolean(DESKTOP, false);
         var sound = settings.getBoolean(SOUND, true);
         if (!settings.getBoolean(kind, true) || !(showToast || sound)) {
             return false;

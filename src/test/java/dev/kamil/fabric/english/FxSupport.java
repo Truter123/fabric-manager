@@ -1,5 +1,6 @@
 package dev.kamil.fabric.english;
 
+import dev.kamil.fabric.FxHarness;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ final class FxSupport {
     }
 
     static void startFx() {
-        Assumptions.assumeTrue(System.getenv("DISPLAY") != null || System.getenv("WAYLAND_DISPLAY") != null,
+        Assumptions.assumeTrue(FxHarness.displayAvailable(),
                 "no display");
         try {
             Platform.startup(() -> { });

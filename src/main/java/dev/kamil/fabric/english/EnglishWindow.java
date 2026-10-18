@@ -1,9 +1,11 @@
 package dev.kamil.fabric.english;
 
+import dev.kamil.fabric.Dialogs;
 import dev.kamil.fabric.settings.AppSettings;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -23,15 +25,11 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
-/** The English window: a Home screen with Learn, Review and Sentences modes. */
+/** The English window: a Home screen with Learn, Review and Sentences modes, on the one list of sentences. */
 public final class EnglishWindow {
 
-    /** The sentences file; tests point it at a temporary file. */
-    static Path file = Path.of("/home/kamil/Documents/Tools/english/everyday.md");
-    /** Where removed sentences are kept: removed.md next to {@link #file}. */
-    static Path removedFile() {
-        return file.resolveSibling("removed.md");
-    }
+    /** The english folder with my-list.md, my-list.removed.md and my-list.progress.csv; tests point it elsewhere. */
+    static Path dir = Path.of("/home/kamil/Documents/Tools/english");
 
     static final String DAILY_SIZE_KEY = "english.daily_size";
     static final int[] DAILY_SIZES = {5, 10, 15, 20};
@@ -88,7 +86,7 @@ public final class EnglishWindow {
 
     private EnglishWindow(Window owner) {
         window.initOwner(owner);
-        sentences = new SentencesPane(window, this::updateTitle);
+        sentences = new SentencesPane(window, this::updateTitle, this::showHome);
         updateTitle();
         var scene = new Scene(root, 1400, 800);
         scene.getStylesheets().add(EnglishWindow.class.getResource("/app.css").toExternalForm());
@@ -124,11 +122,16 @@ public final class EnglishWindow {
         var code = e.getCode();
         switch (mode) {
             case HOME -> {
+                boolean empty = sentences.sentences().isEmpty();
                 if (code == KeyCode.DIGIT1 || code == KeyCode.NUMPAD1) {
-                    showLearn();
+                    if (!empty) {
+                        showLearn();
+                    }
                     e.consume();
                 } else if (code == KeyCode.DIGIT2 || code == KeyCode.NUMPAD2) {
-                    showReview();
+                    if (!empty) {
+                        showReview();
+                    }
                     e.consume();
                 } else if (code == KeyCode.DIGIT3 || code == KeyCode.NUMPAD3) {
                     showSentences();
@@ -219,6 +222,8 @@ public final class EnglishWindow {
         var learnButton = homeButton("Learn (" + fresh + " new)", "Learn new sentences (1)", this::showLearn);
         var reviewButton = homeButton("Review (" + due + " due)", "Review learned sentences (2)", this::showReview);
         var sents = homeButton("Sentences (" + all.size() + ")", "Edit the sentences (3)", this::showSentences);
+        learnButton.setDisable(all.isEmpty());
+        reviewButton.setDisable(all.isEmpty());
 
         var sizeLabel = new Label("Cards per session");
         sizeLabel.getStyleClass().add("history-meta");
@@ -241,9 +246,23 @@ public final class EnglishWindow {
             picker.getChildren().add(b);
         }
 
-        var box = new VBox(14, title, learnButton, reviewButton, sents, picker);
+        var keys = Dialogs.keyHint("1 Learn   2 Review   3 Sentences");
+
+        var box = new VBox(14, title, learnButton, reviewButton, sents, keys, picker);
         box.setAlignment(Pos.CENTER);
         box.setPadding(new Insets(24));
+        if (all.isEmpty()) {
+            var none = new Label("No sentences yet.");
+            none.getStyleClass().add("history-meta");
+            var first = new Button("Add your first sentence");
+            first.getStyleClass().add("primary");
+            first.setFocusTraversable(false);
+            first.setOnAction(e -> {
+                showSentences();
+                sentences.add();
+            });
+            box.getChildren().addAll(1, List.of(none, first));
+        }
         var next = due == 0 ? deck.nextReviewText() : null;
         if (next != null) {
             var label = new Label(next);

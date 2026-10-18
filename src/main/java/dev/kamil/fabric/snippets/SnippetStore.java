@@ -57,6 +57,26 @@ public final class SnippetStore {
         }
     }
 
+    /** Puts a deleted snippet back under a new id and returns it, or -1 on failure; a used one counts as just used. */
+    public synchronized long restore(Snippet snippet) {
+        try (var con = db.connect();
+                var ps = con.prepareStatement(
+                        "INSERT INTO snippet (name, text, project_path, use_count, last_used_at) VALUES (?, ?, ?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, snippet.name());
+            ps.setString(2, snippet.text());
+            ps.setString(3, snippet.projectPath());
+            ps.setInt(4, snippet.useCount());
+            ps.setTimestamp(5, snippet.useCount() > 0 ? Timestamp.from(Instant.now()) : null);
+            ps.executeUpdate();
+            try (var keys = ps.getGeneratedKeys()) {
+                return keys.next() ? keys.getLong(1) : -1;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Cannot restore snippet: " + e.getMessage(), e);
+        }
+    }
+
     /** Global snippets plus those of the project (null = global only), recently used first, then by name. */
     public synchronized List<Snippet> list(String projectPath) {
         var snippets = new ArrayList<Snippet>();

@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import javafx.animation.PauseTransition;
 import javafx.geometry.Insets;
@@ -63,8 +64,8 @@ public final class SettingsWindow {
     private final AppSettings settings;
     private final Stage stage = new Stage();
     private final Path home;
-    private final Path directory;
-    private final Account account;
+    private Path directory;
+    private Account account;
     private final List<String> groups = List.of(GENERAL, TERMINAL, NOTIFICATIONS, ACCOUNTS, BODY_DOUBLE, QUOTES, CLAUDE);
     private final List<Row> rows = new ArrayList<>();
     private final TextField search = new TextField();
@@ -79,6 +80,8 @@ public final class SettingsWindow {
         if (current == null) {
             current = new SettingsWindow(owner, settings, directory, account);
             current.stage.setOnHidden(e -> current = null);
+        } else {
+            current.useContext(directory, account);
         }
         var window = current;
         window.stage.show();
@@ -87,6 +90,11 @@ public final class SettingsWindow {
         window.stage.requestFocus();
         window.search.requestFocus();
         window.search.selectAll();
+    }
+
+    /** The open window's stage, or null; a seam for tests. */
+    static Stage openStage() {
+        return current == null ? null : current.stage;
     }
 
     private SettingsWindow(Window owner, AppSettings settings, Path directory, Account account) {
@@ -142,6 +150,7 @@ public final class SettingsWindow {
         var pane = new BorderPane(scroll);
         pane.setTop(top);
         pane.setLeft(groupList);
+        pane.setBottom(Dialogs.keyHint("Esc clear search / close"));
 
         buildRows();
         var scene = new Scene(pane, 860, 600);
@@ -158,6 +167,17 @@ public final class SettingsWindow {
         });
         stage.setScene(scene);
         groupList.getSelectionModel().select(0);
+    }
+
+    /** Points the Claude config browser at the project and account that are current now, not those of the first open. */
+    private void useContext(Path newDirectory, Account newAccount) {
+        if (Objects.equals(directory, newDirectory) && Objects.equals(account, newAccount)) {
+            return;
+        }
+        directory = newDirectory;
+        account = newAccount;
+        buildRows();
+        showGroup(groupList.getSelectionModel().getSelectedItem());
     }
 
     // ---- search and group switching
@@ -183,6 +203,11 @@ public final class SettingsWindow {
         title.getStyleClass().add("settings-title");
         form.getChildren().add(title);
         var query = search.getText();
+        if (!query.isBlank() && matching.isEmpty()) {
+            var none = new Label("No settings match");
+            none.getStyleClass().add("settings-help");
+            form.getChildren().add(none);
+        }
         for (var row : rows) {
             if (row.entry().group().equals(group)) {
                 var visible = SettingsSearch.matches(row.entry(), query);
@@ -249,7 +274,7 @@ public final class SettingsWindow {
         rows.add(bool(TERMINAL, TerminalSettings.AUDIBLE_BELL, false, "Audible bell",
                 "Play a sound on the terminal bell. Applies to new tabs."));
 
-        rows.add(bool(NOTIFICATIONS, Notifier.DESKTOP, true, "In-app notification",
+        rows.add(bool(NOTIFICATIONS, Notifier.DESKTOP, false, "In-app notification",
                 "Show a toast inside the window when a session needs you while you look elsewhere."));
         rows.add(bool(NOTIFICATIONS, Notifier.SOUND, true, "Sound",
                 "Play a sound together with the notification."));
@@ -313,6 +338,10 @@ public final class SettingsWindow {
     private Row intRow(String group, String key, int def, int min, int max, String label, String help) {
         var field = new TextField(Integer.toString(settings.getInt(key, def)));
         field.setMaxWidth(120);
+        var error = new Label(min + " to " + max);
+        error.getStyleClass().add("inline-error");
+        error.setVisible(false);
+        error.setManaged(false);
         field.textProperty().addListener((o, was, now) -> {
             if (!now.matches("\\d{0,9}")) {
                 field.setText(was);
@@ -320,11 +349,15 @@ public final class SettingsWindow {
             }
             var valid = !now.isEmpty() && Integer.parseInt(now) >= min && Integer.parseInt(now) <= max;
             field.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("invalid"), !valid);
+            error.setVisible(!valid);
+            error.setManaged(!valid);
             if (valid) {
                 save(() -> settings.setInt(key, Integer.parseInt(now)));
             }
         });
-        return row(group, label, help, field, true);
+        var control = new HBox(8, field, error);
+        control.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        return row(group, label, help, control, true);
     }
 
     private Row fontRow() {

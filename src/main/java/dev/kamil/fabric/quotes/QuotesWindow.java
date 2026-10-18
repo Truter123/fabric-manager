@@ -47,6 +47,11 @@ public final class QuotesWindow {
         created.window.show();
     }
 
+    /** The open window, or null; for tests. */
+    static Stage openStage() {
+        return instance == null ? null : instance.window;
+    }
+
     private QuotesWindow(Window owner, Database db, Runnable onChange) {
         store = new QuoteStore(db);
         this.onChange = onChange == null ? () -> { } : onChange;
@@ -57,6 +62,7 @@ public final class QuotesWindow {
         var edit = new Button("Edit…");
         var delete = new Button("Delete…");
         add.setOnAction(e -> add());
+        add.getStyleClass().add("primary");
         edit.setOnAction(e -> edit());
         delete.setOnAction(e -> delete());
         edit.disableProperty().bind(list.getSelectionModel().selectedItemProperty().isNull());
@@ -70,9 +76,11 @@ public final class QuotesWindow {
 
         var root = new BorderPane(list);
         root.setTop(bar);
+        root.setBottom(Dialogs.keyHint("Double-click edit   Esc close"));
         var scene = new Scene(root, 700, 500);
         scene.getStylesheets().add(QuotesWindow.class.getResource("/app.css").toExternalForm());
         window.setScene(scene);
+        Dialogs.closeOnEscape(scene, window);
         refresh();
     }
 
@@ -138,6 +146,8 @@ public final class QuotesWindow {
         grid.addRow(0, new Label("Quote"), textArea);
         grid.addRow(1, new Label("Author"), authorField);
         dialog.getDialogPane().setContent(grid);
+        dialog.getDialogPane().lookupButton(ButtonType.OK).disableProperty()
+                .bind(textArea.textProperty().map(String::isBlank).orElse(true));
         var result = dialog.showAndWait();
         if (result.isEmpty() || result.get() != ButtonType.OK || textArea.getText().isBlank()) {
             return null;

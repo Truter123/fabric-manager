@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 /** Reads CPU, GPU and NVMe temperature, CPU load, RAM and battery from sysfs and procfs. Never throws. */
-public final class SystemStats {
+public class SystemStats {
 
     /** One displayed part; level is "" (normal), "warn" or "hot". */
     public record Part(String text, String level) {

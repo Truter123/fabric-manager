@@ -51,10 +51,9 @@ class ReviewPaneE2ETest {
 
     @BeforeEach
     void prepare() throws Exception {
-        progress = dir.resolve("flashcards.csv");
-        ProgressStore.file = progress;
-        sentencesFile = dir.resolve("everyday.md");
-        EnglishWindow.file = sentencesFile;
+        progress = dir.resolve("my-list.progress.csv");
+        sentencesFile = dir.resolve("my-list.md");
+        EnglishWindow.dir = dir;
         SentenceFile.save(sentencesFile, ALL);
         var today = java.time.LocalDate.now();
         CardProgress.save(progress, List.of(new CardProgress(A.english(), 1, today),
@@ -122,15 +121,24 @@ class ReviewPaneE2ETest {
         }
     }
 
+    /** The header title without its "Review · " prefix: {@code card 1 of 3 · due today}, or "" on an end screen. */
     private String counter() throws Exception {
         return fx(() -> {
             for (Node n : stage().getScene().getRoot().lookupAll(".history-meta")) {
-                if (n instanceof Label l && (l.getText().startsWith("card") || l.getText().isEmpty())) {
-                    return l.getText();
+                if (n instanceof Label l && l.getText().startsWith("Review")) {
+                    return l.getText().replaceFirst("^Review( · )?", "");
                 }
             }
             return null;
         });
+    }
+
+    private boolean primary(String button) throws Exception {
+        return fx(() -> button(stage().getScene().getRoot(), button).getStyleClass().contains("primary"));
+    }
+
+    private CardProgress row(Sentence card) throws Exception {
+        return CardProgress.load(progress).stream().filter(p -> p.english().equals(card.english())).findFirst().get();
     }
 
     private Sentence current() throws Exception {
@@ -156,7 +164,8 @@ class ReviewPaneE2ETest {
         var card = current();
         assertEquals(List.of(card.pl()), texts().subList(0, 1));
         assertTrue(buttons().contains("Record (R)"));
-        assertFalse(buttons().contains("Next (Space)"));
+        assertTrue(buttons().contains("Show answer (Space)"));
+        assertFalse(texts().contains(card.english()));
     }
 
     @Test
@@ -170,7 +179,7 @@ class ReviewPaneE2ETest {
         if (!card.watchPlain().isBlank()) {
             assertTrue(shown.contains(card.watchPlain()));
         }
-        assertTrue(buttons().containsAll(List.of("Me (P)", "Try again (R)", "First (F)", "Next (Space)")));
+        assertTrue(buttons().containsAll(List.of("Me (P)", "Try again (R)", "First (F)", "Next (→)")));
         assertTrue(disabled("Me (P)"));
         assertTrue(disabled("First (F)"));
         assertFalse(Recorder.LOG.contains("speak:" + card.english()), Recorder.LOG.toString());
@@ -219,7 +228,7 @@ class ReviewPaneE2ETest {
         for (int i = 1; i <= 3; i++) {
             assertEquals("card " + i + " of 3 · due today", counter());
             key(KeyCode.SPACE);
-            click("Next (Space)");
+            click("Next (→)");
         }
         assertEquals("", counter());
         assertEquals(List.of("Done: 3 cards. Next review: tomorrow (3)."), texts());
@@ -252,7 +261,8 @@ class ReviewPaneE2ETest {
 
     @Test
     void emptyDeckSaysNothingDueAndSpaceTriesMore() throws Exception {
-        open(List.of());
+        // a list without a card (no Polish front): Review is enabled, its deck is empty
+        open(List.of(new Sentence("2026-10-01", "No front", "", "", "")));
         assertEquals(List.of("Nothing due today."), texts());
         assertFalse(buttons().contains("10 more (Space)"));
         key(KeyCode.SPACE);
@@ -265,9 +275,13 @@ class ReviewPaneE2ETest {
         var card = current();
         key(KeyCode.R);
         assertTrue(buttons().contains("● Recording… (R to stop)"));
+        Recorder.LOG.clear();
         key(KeyCode.R);
         assertEquals(card.english(), texts().get(0));
         assertEquals(1, history.list(card.english()).size());
+        // the recording just made plays back once, to compare with the answer
+        var made = history.list(card.english()).get(0).file().getFileName().toString();
+        assertEquals(List.of("play:" + made), List.copyOf(Recorder.LOG));
         assertFalse(disabled("Me (P)"));
         assertTrue(disabled("First (F)"));
         // one attempt row with its own play button
@@ -314,7 +328,7 @@ class ReviewPaneE2ETest {
         var card = current();
         key(KeyCode.SPACE);
         click("Try again (R)");
-        click("Next (Space)");
+        click("Next (→)");
         assertEquals("card 2 of 3 · due today", counter());
         assertEquals(1, history.list(card.english()).size());
         assertTrue(buttons().contains("Record (R)"));
@@ -382,7 +396,7 @@ class ReviewPaneE2ETest {
         var saved = SentenceFile.load(sentencesFile);
         assertEquals(2, saved.size());
         assertTrue(saved.containsAll(kept));
-        assertEquals(List.of(gone), SentenceFile.load(sentencesFile.resolveSibling("removed.md")));
+        assertEquals(List.of(gone), SentenceFile.load(sentencesFile.resolveSibling("my-list.removed.md")));
         key(KeyCode.ESCAPE);
         assertTrue(buttons().contains("Sentences (2)"), buttons().toString());
         assertTrue(buttons().contains("Review (2 due)"), buttons().toString());
@@ -417,8 +431,8 @@ class ReviewPaneE2ETest {
         click("Remove (Del)");
         assertEquals("card 1 of 1 · due today", counter());
         assertEquals(1, SentenceFile.load(sentencesFile).size());
-        assertEquals(2, SentenceFile.load(sentencesFile.resolveSibling("removed.md")).size());
-        assertTrue(SentenceFile.load(sentencesFile.resolveSibling("removed.md")).containsAll(List.of(first, second)));
+        assertEquals(2, SentenceFile.load(sentencesFile.resolveSibling("my-list.removed.md")).size());
+        assertTrue(SentenceFile.load(sentencesFile.resolveSibling("my-list.removed.md")).containsAll(List.of(first, second)));
     }
 
     private void assertRemovedCardNoLeave(Sentence gone) throws Exception {
@@ -469,6 +483,144 @@ class ReviewPaneE2ETest {
         key(KeyCode.DIGIT2);
         key(KeyCode.SPACE);
         click("Home (Esc)");
-        assertFalse(buttons().contains("Next (Space)"));
+        assertFalse(buttons().contains("Next (→)"));
+    }
+
+    @Test
+    void theFrameShowsEachButtonOnceOnTheFront() throws Exception {
+        open(ALL);
+        for (var text : List.of("Show answer (Space)", "Record (R)", "Back (←)", "Next (→)", "Remove (Del)",
+                "Home (Esc)")) {
+            assertEquals(1, buttons().stream().filter(text::equals).count(), text + " in " + buttons());
+        }
+        assertTrue(primary("Show answer (Space)"));
+        assertFalse(primary("Next (→)"));
+    }
+
+    @Test
+    void theFrameShowsEachButtonOnceOnTheBackAndNextIsPrimary() throws Exception {
+        open(ALL);
+        key(KeyCode.SPACE);
+        for (var text : List.of("Listen (L)", "Back (←)", "Next (→)", "Remove (Del)", "Home (Esc)")) {
+            assertEquals(1, buttons().stream().filter(text::equals).count(), text + " in " + buttons());
+        }
+        assertFalse(buttons().contains("Show answer (Space)"));
+        assertTrue(primary("Next (→)"));
+    }
+
+    @Test
+    void showAnswerButtonRevealsTheBack() throws Exception {
+        open(ALL);
+        var card = current();
+        click("Show answer (Space)");
+        assertEquals(card.english(), texts().get(0));
+        assertFalse(buttons().contains("Show answer (Space)"));
+        assertTrue(buttons().contains("Me (P)"));
+    }
+
+    /** An older recording of the card stays silent on Show answer; Me (P) plays it on request. */
+    @Test
+    void showAnswerDoesNotPlayAnOlderRecording() throws Exception {
+        open(ALL);
+        var card = current();
+        Files.write(history.newFile(card.english(), java.time.LocalDateTime.now().minusDays(1)), new byte[] {0});
+        Recorder.LOG.clear();
+        click("Show answer (Space)");
+        assertEquals(card.english(), texts().get(0));
+        assertFalse(disabled("Me (P)"));
+        assertTrue(Recorder.LOG.stream().noneMatch(s -> s.startsWith("play:")), Recorder.LOG.toString());
+        click("Me (P)");
+        assertTrue(Recorder.LOG.stream().anyMatch(s -> s.startsWith("play:")), Recorder.LOG.toString());
+    }
+
+    @Test
+    void nextOnTheFrontSkipsTheCardAndLeavesItsCsvRow() throws Exception {
+        open(ALL);
+        var skipped = current();
+        var before = Files.readString(progress);
+        click("Next (→)");
+        assertEquals("card 2 of 3 · due today", counter());
+        assertFalse(current().equals(skipped));
+        assertEquals(before, Files.readString(progress));
+        assertEquals(new CardProgress(skipped.english(), 1, LocalDate.now()), row(skipped));
+    }
+
+    @Test
+    void backAfterASkipShowsTheSkippedCardOnItsFront() throws Exception {
+        open(ALL);
+        var skipped = current();
+        click("Next (→)");
+        assertFalse(disabled("Back (←)"));
+        click("Back (←)");
+        assertEquals("card 1 of 3 · due today", counter());
+        assertEquals(skipped.pl(), texts().get(0));
+        assertTrue(buttons().contains("Record (R)"));
+        assertTrue(disabled("Back (←)"));
+        assertEquals(new CardProgress(skipped.english(), 1, LocalDate.now()), row(skipped));
+    }
+
+    @Test
+    void rightArrowSkipsOnTheFrontAndGradesGoodOnTheBack() throws Exception {
+        open(ALL);
+        var first = current();
+        key(KeyCode.RIGHT);
+        assertEquals("card 2 of 3 · due today", counter());
+        assertEquals(new CardProgress(first.english(), 1, LocalDate.now()), row(first));
+        var second = current();
+        key(KeyCode.SPACE);
+        key(KeyCode.RIGHT);
+        assertEquals("card 3 of 3 · due today", counter());
+        assertEquals(new CardProgress(second.english(), 2, LocalDate.now().plusDays(1)), row(second));
+        assertEquals(new CardProgress(first.english(), 1, LocalDate.now()), row(first));
+    }
+
+    @Test
+    void enterActsLikeSpace() throws Exception {
+        open(ALL);
+        var card = current();
+        key(KeyCode.ENTER);
+        assertEquals(card.english(), texts().get(0));
+        key(KeyCode.ENTER);
+        assertEquals("card 2 of 3 · due today", counter());
+        assertEquals(2, row(card).box());
+        for (int i = 0; i < 4; i++) {
+            key(KeyCode.ENTER);
+        }
+        assertEquals(List.of("Done: 3 cards. Next review: tomorrow (3)."), texts());
+        // on the end screen Enter asks for more cards, like Space
+        key(KeyCode.ENTER);
+        assertEquals(List.of("Nothing more due today."), texts());
+    }
+
+    @Test
+    void theEndScreenCountsSkippedCardsAndMakesMorePrimary() throws Exception {
+        open(ALL);
+        click("Next (→)");
+        for (int i = 0; i < 2; i++) {
+            key(KeyCode.SPACE);
+            key(KeyCode.SPACE);
+        }
+        assertEquals(List.of("Done: 2 cards. Skipped 1, still due. Next review: tomorrow (2)."), texts());
+        assertTrue(primary("10 more (Space)"));
+        assertFalse(primary("Next (→)"));
+        assertTrue(disabled("Next (→)"));
+        assertTrue(disabled("Remove (Del)"));
+        assertFalse(disabled("Back (←)"));
+    }
+
+    @Test
+    void backStillWorksOnTheNothingMoreDueTodayScreen() throws Exception {
+        open(ALL);
+        for (int i = 0; i < 3; i++) {
+            key(KeyCode.SPACE);
+            key(KeyCode.SPACE);
+        }
+        click("10 more (Space)");
+        assertEquals(List.of("Nothing more due today."), texts());
+        assertFalse(disabled("Back (←)"));
+        assertTrue(disabled("Next (→)"));
+        click("Back (←)");
+        assertEquals("card 3 of 3 · due today", counter());
+        assertEquals(1, CardProgress.load(progress).stream().filter(p -> p.box() == 1).count());
     }
 }
