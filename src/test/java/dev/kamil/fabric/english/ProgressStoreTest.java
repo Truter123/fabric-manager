@@ -41,4 +41,16 @@ class ProgressStoreTest {
         assertEquals(4, loaded.get("A").box());
         assertEquals(2, loaded.get("B").box());
     }
+
+    @Test
+    void forgetRemovesOnlyThatRow() throws Exception {
+        ProgressStore.forget("A");
+        ProgressStore.save(List.of(new CardProgress("A", 1, D), new CardProgress("B", 2, D)),
+                List.of(s("A"), s("B")));
+        ProgressStore.forget("A");
+        var loaded = ProgressStore.load();
+        assertEquals(List.of("B"), List.copyOf(loaded.keySet()));
+        ProgressStore.forget("Nope");
+        assertEquals(1, ProgressStore.load().size());
+    }
 }

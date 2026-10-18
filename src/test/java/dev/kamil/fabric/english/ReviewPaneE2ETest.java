@@ -373,4 +373,102 @@ class ReviewPaneE2ETest {
         assertEquals("card 1 of 1 · due today", counter());
         assertEquals(List.of(B.pl()), texts().subList(0, 1));
     }
+
+    private void assertRemovedCard(Sentence gone) throws Exception {
+        assertEquals("card 1 of 2 · due today", counter());
+        assertFalse(texts().get(0).equals(gone.pl()));
+        var kept = new ArrayList<>(ALL);
+        kept.remove(gone);
+        var saved = SentenceFile.load(sentencesFile);
+        assertEquals(2, saved.size());
+        assertTrue(saved.containsAll(kept));
+        assertEquals(List.of(gone), SentenceFile.load(sentencesFile.resolveSibling("removed.md")));
+        key(KeyCode.ESCAPE);
+        assertTrue(buttons().contains("Sentences (2)"), buttons().toString());
+        assertTrue(buttons().contains("Review (2 due)"), buttons().toString());
+    }
+
+    @Test
+    void deleteOnTheFrontRemovesTheCard() throws Exception {
+        open(ALL);
+        var gone = current();
+        key(KeyCode.DELETE);
+        assertRemovedCard(gone);
+    }
+
+    @Test
+    void deleteOnTheBackRemovesTheCardWithoutGrading() throws Exception {
+        open(ALL);
+        var gone = current();
+        key(KeyCode.SPACE);
+        key(KeyCode.DELETE);
+        assertRemovedCard(gone);
+        assertEquals(3, CardProgress.load(progress).size());
+    }
+
+    @Test
+    void removeButtonWorksOnBothSides() throws Exception {
+        open(ALL);
+        var first = current();
+        click("Remove (Del)");
+        assertRemovedCardNoLeave(first);
+        var second = current();
+        key(KeyCode.SPACE);
+        click("Remove (Del)");
+        assertEquals("card 1 of 1 · due today", counter());
+        assertEquals(1, SentenceFile.load(sentencesFile).size());
+        assertEquals(2, SentenceFile.load(sentencesFile.resolveSibling("removed.md")).size());
+        assertTrue(SentenceFile.load(sentencesFile.resolveSibling("removed.md")).containsAll(List.of(first, second)));
+    }
+
+    private void assertRemovedCardNoLeave(Sentence gone) throws Exception {
+        assertEquals("card 1 of 2 · due today", counter());
+        assertFalse(texts().get(0).equals(gone.pl()));
+    }
+
+    @Test
+    void backRestoresTheGradedCardOnItsFrontAndItsCsvRow() throws Exception {
+        CardProgress.save(progress, List.of(new CardProgress(A.english(), 3, LocalDate.now()),
+                new CardProgress(B.english(), 3, LocalDate.now()), new CardProgress(C.english(), 3, LocalDate.now())));
+        open(ALL);
+        assertTrue(disabled("Back (←)"));
+        var card = current();
+        key(KeyCode.SPACE);
+        key(KeyCode.SPACE);
+        assertEquals("card 2 of 3 · box 3", counter());
+        var graded = CardProgress.load(progress).stream().filter(p -> p.english().equals(card.english())).findFirst().get();
+        assertEquals(4, graded.box());
+        assertFalse(disabled("Back (←)"));
+        key(KeyCode.LEFT);
+        assertEquals("card 1 of 3 · box 3", counter());
+        assertEquals(card.pl(), texts().get(0));
+        assertTrue(buttons().contains("Record (R)"));
+        var restored = CardProgress.load(progress).stream().filter(p -> p.english().equals(card.english())).findFirst().get();
+        assertEquals(new CardProgress(card.english(), 3, LocalDate.now()), restored);
+        assertTrue(disabled("Back (←)"));
+    }
+
+    @Test
+    void backFromTheEndScreenShowsTheLastGradedCard() throws Exception {
+        open(ALL);
+        for (int i = 0; i < 3; i++) {
+            key(KeyCode.SPACE);
+            key(KeyCode.SPACE);
+        }
+        assertEquals("", counter());
+        click("Back (←)");
+        assertEquals("card 3 of 3 · due today", counter());
+        assertEquals(1, CardProgress.load(progress).stream().filter(p -> p.box() == 1).count());
+    }
+
+    @Test
+    void homeButtonOnTheFrontAndTheBackGoesHome() throws Exception {
+        open(ALL);
+        click("Home (Esc)");
+        assertFalse(buttons().contains("Record (R)"));
+        key(KeyCode.DIGIT2);
+        key(KeyCode.SPACE);
+        click("Home (Esc)");
+        assertFalse(buttons().contains("Next (Space)"));
+    }
 }

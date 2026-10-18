@@ -30,6 +30,11 @@ public final class Deck {
     private int done;
     private int good;
     private final java.util.Set<String> missed = new java.util.HashSet<>();
+    private final Deque<Step> history = new ArrayDeque<>();
+
+    /** State before one grade, so {@link #back()} can restore it. */
+    private record Step(Sentence card, CardProgress old, int done, int good, boolean wasMissed) {
+    }
 
     public Deck(List<Sentence> sentences, Map<String, CardProgress> saved, LocalDate today) {
         this(sentences, saved, today, null);
@@ -87,12 +92,53 @@ public final class Deck {
         return queue.peekFirst();
     }
 
+    /** Drops the current card from this session without grading it; the card is not scheduled again. */
+    public void discard() {
+        var card = queue.pollFirst();
+        if (card == null) {
+            return;
+        }
+        cards.remove(card.english());
+        progress.remove(card.english());
+        history.removeIf(step -> step.card().english().equals(card.english()));
+        total--;
+    }
+
+    /** True when a grade of this session can be undone. */
+    public boolean canBack() {
+        return !history.isEmpty();
+    }
+
+    /**
+     * Undoes the last grade: the card returns to the front of the queue with its old progress and counts.
+     * Returns false when nothing was graded yet.
+     */
+    public boolean back() {
+        var step = history.pollFirst();
+        if (step == null) {
+            return false;
+        }
+        var english = step.card().english();
+        queue.removeLastOccurrence(step.card());
+        queue.addFirst(step.card());
+        progress.put(english, step.old());
+        done = step.done();
+        good = step.good();
+        if (step.wasMissed()) {
+            missed.add(english);
+        } else {
+            missed.remove(english);
+        }
+        return true;
+    }
+
     public void grade(Grade grade) {
         var card = queue.pollFirst();
         if (card == null) {
             return;
         }
         var old = progress.get(card.english());
+        history.addFirst(new Step(card, old, done, good, missed.contains(card.english())));
         if (grade == Grade.AGAIN) {
             progress.put(card.english(), new CardProgress(card.english(), 1, today));
             missed.add(card.english());

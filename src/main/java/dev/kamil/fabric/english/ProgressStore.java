@@ -45,4 +45,18 @@ public final class ProgressStore {
         }
         CardProgress.save(file, merged);
     }
+
+    /** Removes the saved row of {@code english}, if any, so the sentence is new again. */
+    static void forget(String english) throws IOException {
+        if (!Files.exists(file)) {
+            return;
+        }
+        var kept = new ArrayList<CardProgress>();
+        for (var p : CardProgress.load(file)) {
+            if (!p.english().equals(english)) {
+                kept.add(p);
+            }
+        }
+        CardProgress.save(file, kept);
+    }
 }

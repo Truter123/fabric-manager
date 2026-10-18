@@ -843,6 +843,15 @@ final class SentencesPane extends BorderPane {
         }
     }
 
+    /**
+     * Soft-removes {@code s} like the card Remove and saves at once (mtime check included); when the save
+     * fails or is cancelled the sentence stays removed as an unsaved change.
+     */
+    void removeAndSave(Sentence s) {
+        remove(s);
+        save();
+    }
+
     private void restore(Sentence s) {
         if (removed.remove(s)) {
             justRemoved.remove(s);

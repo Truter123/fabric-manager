@@ -186,13 +186,13 @@ public final class EnglishWindow {
 
     private void showLearn() {
         mode = Mode.LEARN;
-        learn = new LearnPane(window, sentences.sentences(), dailySize(), this::showHome);
+        learn = new LearnPane(window, sentences.sentences(), dailySize(), this::showHome, sentences::removeAndSave);
         show(learn);
     }
 
     private void showReview() {
         mode = Mode.REVIEW;
-        review = new ReviewPane(window, sentences.sentences(), dailySize(), this::showHome);
+        review = new ReviewPane(window, sentences.sentences(), dailySize(), this::showHome, sentences::removeAndSave);
         show(review);
     }
 

@@ -253,4 +253,107 @@ class LearnPaneE2ETest {
         assertEquals(1, history.list(A.english()).size());
         assertTrue(buttons().contains("Learn (2 new)"));
     }
+
+    private void assertRemovedFirstCard() throws Exception {
+        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("Good morning", texts().get(0));
+        assertEquals(List.of(B, C), SentenceFile.load(sentencesFile));
+        assertEquals(List.of(A), SentenceFile.load(sentencesFile.resolveSibling("removed.md")));
+        assertEquals("English", fx(() -> stage().getTitle()));
+        assertTrue(fx(() -> stage().getScene().getRoot().lookupAll(".history-meta").stream()
+                .anyMatch(n -> n instanceof Label l && l.isVisible()
+                        && l.getText().equals("Removed. Restore it in Sentences → Removed."))));
+        key(KeyCode.ESCAPE);
+        assertTrue(buttons().contains("Learn (2 new)"), buttons().toString());
+        assertTrue(buttons().contains("Sentences (2)"), buttons().toString());
+    }
+
+    @Test
+    void deleteKeyRemovesTheCurrentCardAndSavesBothFiles() throws Exception {
+        open(A, B, C);
+        key(KeyCode.DELETE);
+        assertRemovedFirstCard();
+    }
+
+    @Test
+    void removeButtonDoesTheSame() throws Exception {
+        open(A, B, C);
+        assertTrue(buttons().contains("Remove (Del)"));
+        click("Remove (Del)");
+        assertRemovedFirstCard();
+    }
+
+    @Test
+    void removingTheLastCardShowsTheEndScreenWithTheHint() throws Exception {
+        open(A);
+        key(KeyCode.DELETE);
+        assertEquals(List.of("Nothing new to learn."), texts());
+        assertEquals(List.of(), SentenceFile.load(sentencesFile));
+        assertEquals(List.of(A), SentenceFile.load(sentencesFile.resolveSibling("removed.md")));
+    }
+
+    private void learnFirst() throws Exception {
+        key(KeyCode.R);
+        key(KeyCode.R);
+        key(KeyCode.SPACE);
+    }
+
+    @Test
+    void backAfterKnowItShowsThePreviousCardAndForgetsItsRow() throws Exception {
+        open(A, B);
+        assertTrue(disabled("Back (←)"));
+        learnFirst();
+        assertEquals(List.of(new CardProgress(A.english(), 1, LocalDate.now().plusDays(1))), CardProgress.load(progress));
+        assertFalse(disabled("Back (←)"));
+        key(KeyCode.LEFT);
+        assertEquals("new 1 of 2 · new", counter());
+        assertEquals("I am late", texts().get(0));
+        assertEquals(List.of(), CardProgress.load(progress));
+        assertTrue(disabled("Back (←)"));
+        key(KeyCode.LEFT);
+        assertEquals("new 1 of 2 · new", counter());
+    }
+
+    @Test
+    void backAfterSkipShowsTheSkippedCardAgain() throws Exception {
+        open(A, B);
+        key(KeyCode.N);
+        click("Back (←)");
+        assertEquals("I am late", texts().get(0));
+        assertFalse(Files.exists(progress));
+    }
+
+    @Test
+    void backFromTheEndScreenShowsTheLastCard() throws Exception {
+        open(A);
+        learnFirst();
+        assertEquals(List.of("Learned 1. Review starts tomorrow."), texts());
+        click("Back (←)");
+        assertEquals("new 1 of 1 · new", counter());
+        assertEquals("I am late", texts().get(0));
+        assertEquals(List.of(), CardProgress.load(progress));
+        key(KeyCode.R);
+        key(KeyCode.R);
+        key(KeyCode.SPACE);
+        key(KeyCode.LEFT);
+        assertEquals("I am late", texts().get(0));
+    }
+
+    @Test
+    void backSkipsOverARemovedCard() throws Exception {
+        open(A, B, C);
+        key(KeyCode.N);
+        key(KeyCode.DELETE);
+        assertEquals("See you soon", texts().get(0));
+        key(KeyCode.LEFT);
+        assertEquals("I am late", texts().get(0));
+    }
+
+    @Test
+    void homeButtonOnTheCardGoesHome() throws Exception {
+        open(A, B);
+        click("Home (Esc)");
+        assertTrue(buttons().stream().anyMatch(b -> b.contains("Learn")) || !buttons().contains("Skip (N)"));
+        assertFalse(buttons().contains("Skip (N)"));
+    }
 }

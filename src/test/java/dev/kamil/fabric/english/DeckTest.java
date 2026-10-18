@@ -175,4 +175,70 @@ class DeckTest {
         deck.grade(Deck.Grade.GOOD);
         assertEquals("A", deck.next().english());
     }
+
+    @Test
+    void backRestoresTheCardItsProgressAndTheCounts() {
+        var deck = new Deck(List.of(s("A"), s("B")),
+                map(new CardProgress("A", 3, TODAY), new CardProgress("B", 3, TODAY)), TODAY);
+        var first = deck.next();
+        deck.grade(Deck.Grade.GOOD);
+        var second = deck.next();
+        assertEquals(1, deck.done());
+        assertEquals(true, deck.canBack());
+        assertEquals(true, deck.back());
+        assertEquals(first, deck.next());
+        assertEquals(new CardProgress(first.english(), 3, TODAY), deck.progressOf(first.english()));
+        assertEquals(0, deck.done());
+        assertEquals(0, deck.good());
+        deck.grade(Deck.Grade.GOOD);
+        assertEquals(second, deck.next());
+    }
+
+    @Test
+    void backUndoesAnAgainAndKeepsQueueOrder() {
+        var deck = new Deck(List.of(s("A"), s("B")),
+                map(new CardProgress("A", 3, TODAY), new CardProgress("B", 3, TODAY)), TODAY);
+        var first = deck.next();
+        deck.grade(Deck.Grade.AGAIN);
+        var second = deck.next();
+        assertEquals(true, deck.back());
+        assertEquals(first, deck.next());
+        assertEquals(3, deck.progressOf(first.english()).box());
+        deck.grade(Deck.Grade.GOOD);
+        assertEquals(second, deck.next());
+        deck.grade(Deck.Grade.GOOD);
+        assertNull(deck.next());
+        assertEquals(2, deck.done());
+        assertEquals(2, deck.good());
+    }
+
+    @Test
+    void backGoesSeveralStepsAndIsANoOpAtTheStart() {
+        var deck = new Deck(List.of(s("A"), s("B")),
+                map(new CardProgress("A", 1, TODAY), new CardProgress("B", 1, TODAY)), TODAY);
+        assertEquals(false, deck.canBack());
+        assertEquals(false, deck.back());
+        var first = deck.next();
+        deck.grade(Deck.Grade.GOOD);
+        deck.grade(Deck.Grade.EASY);
+        assertNull(deck.next());
+        assertEquals(true, deck.back());
+        assertEquals(true, deck.back());
+        assertEquals(false, deck.back());
+        assertEquals(first, deck.next());
+        assertEquals(0, deck.done());
+        assertEquals(1, deck.progressOf("A").box());
+        assertEquals(1, deck.progressOf("B").box());
+    }
+
+    @Test
+    void discardedCardsAreNotInTheHistory() {
+        var deck = new Deck(List.of(s("A"), s("B")),
+                map(new CardProgress("A", 1, TODAY), new CardProgress("B", 1, TODAY)), TODAY);
+        deck.discard();
+        assertEquals(false, deck.canBack());
+        deck.grade(Deck.Grade.GOOD);
+        assertEquals(true, deck.back());
+        assertEquals(false, deck.back());
+    }
 }
